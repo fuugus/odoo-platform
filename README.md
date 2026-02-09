@@ -7,7 +7,7 @@ One repo, one command, everything gets set up.
 
 ```bash
 # On a fresh Ubuntu 24.04 server:
-git clone <repo-url> /root/odoo-platform
+git clone https://github.com/fuugus/odoo-platform.git /root/odoo-platform
 cd /root/odoo-platform
 chmod +x bootstrap.sh
 ./bootstrap.sh
