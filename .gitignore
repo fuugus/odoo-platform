@@ -17,3 +17,6 @@ Thumbs.db
 
 # Cline
 .cline/
+
+# Documentation / client files (large, not in git)
+docs/
