@@ -19,8 +19,12 @@ This installs Python dependencies and starts the **Admin Panel** as a systemd se
 
 **Via VS Code Remote SSH (recommended for development):**
 1. Connect to the server with VS Code Remote SSH
-2. VS Code auto-forwards port 8080
-3. Open `http://127.0.0.1:8080` in your browser
+2. Open the **Ports** tab (bottom panel, next to Terminal)
+3. Click **"Forward a Port"** and enter `8080`
+4. Open `http://127.0.0.1:8080` in your browser
+
+> **Note:** VS Code sometimes auto-detects the port, but if not, add it manually.
+> Alternatively, run `systemctl restart odoo-admin-panel` to trigger auto-detection.
 
 **After Nginx setup (production):**
 - `http://admin.odoo.binaryone.ch`
