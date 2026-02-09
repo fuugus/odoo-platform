@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Datenbanken - Odoo Platform{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>🗄️ Datenbank-Verwaltung</h1>
+    <p>PostgreSQL-Datenbanken erstellen, klonen und löschen</p>
+</div>
+
+<div class="card">
+    <h3>Datenbanken</h3>
+    <button class="btn btn-secondary" onclick="loadDatabases()">🔄 Aktualisieren</button>
+    <table class="data-table" id="db-table">
+        <thead>
+            <tr>
+                <th>Datenbank</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody id="db-list">
+            <tr><td colspan="2">Lade...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Datenbank klonen</h3>
+    <p>Erstellt eine exakte Kopie einer bestehenden Datenbank (z.B. Prod → Staging).</p>
+    <div class="form-grid">
+        <div class="form-row">
+            <label for="clone-source">Quelle:</label>
+            <select id="clone-source"></select>
+        </div>
+        <div class="form-row">
+            <label for="clone-target">Ziel-Name:</label>
+            <input type="text" id="clone-target" placeholder="kaminfeger_staging">
+        </div>
+    </div>
+    <button class="btn btn-primary" onclick="cloneDb()">📋 Klonen</button>
+</div>
+
+<div class="card">
+    <h3>Naming Conventions</h3>
+    <table class="data-table">
+        <thead><tr><th>Typ</th><th>Pattern</th><th>Beispiel</th></tr></thead>
+        <tbody>
+            <tr><td>Production</td><td><code>{client}_prod</code></td><td><code>kaminfeger_prod</code></td></tr>
+            <tr><td>Staging</td><td><code>{client}_staging</code></td><td><code>kaminfeger_staging</code></td></tr>
+            <tr><td>Development</td><td><code>{client}_dev_{name}</code></td><td><code>kaminfeger_dev_samuel</code></td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SYSTEM_DBS = ['postgres', 'template0', 'template1'];
+
+async function loadDatabases() {
+    try {
+        const resp = await fetch('/api/databases');
+        const data = await resp.json();
+        const tbody = document.getElementById('db-list');
+        const cloneSelect = document.getElementById('clone-source');
+
+        tbody.innerHTML = '';
+        cloneSelect.innerHTML = '';
+
+        if (!data.databases || data.databases.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2">Keine Datenbanken gefunden (PostgreSQL evtl. noch nicht installiert)</td></tr>';
+            return;
+        }
+
+        data.databases.forEach(db => {
+            const isSystem = SYSTEM_DBS.includes(db);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><code>${db}</code> ${isSystem ? '<span class="badge badge-system">system</span>' : ''}</td>
+                <td>
+                    ${isSystem ? '' : `<button class="btn btn-sm btn-danger" onclick="deleteDb('${db}')">🗑️ Löschen</button>`}
+                </td>
+            `;
+            tbody.appendChild(tr);
+
+            if (!isSystem) {
+                const opt = document.createElement('option');
+                opt.value = db;
+                opt.textContent = db;
+                cloneSelect.appendChild(opt);
+            }
+        });
+    } catch(e) {
+        document.getElementById('db-list').innerHTML =
+            `<tr><td colspan="2">Fehler: ${e.message}</td></tr>`;
+    }
+}
+
+async function cloneDb() {
+    const source = document.getElementById('clone-source').value;
+    const target = document.getElementById('clone-target').value;
+    if (!source || !target) { showToast('Quelle und Ziel erforderlich', 'error'); return; }
+
+    try {
+        const resp = await fetch('/api/databases/clone', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({source, target})
+        });
+        if (resp.ok) {
+            showToast(`Datenbank ${target} erstellt`);
+            loadDatabases();
+        } else {
+            const data = await resp.json();
+            showToast(`Fehler: ${data.detail}`, 'error');
+        }
+    } catch(e) {
+        showToast(`Fehler: ${e.message}`, 'error');
+    }
+}
+
+async function deleteDb(name) {
+    if (!confirm(`Datenbank "${name}" wirklich löschen?`)) return;
+    if (!confirm('Sicher? Das kann nicht rückgängig gemacht werden!')) return;
+
+    try {
+        const resp = await fetch(`/api/databases/${name}`, {method: 'DELETE'});
+        if (resp.ok) {
+            showToast(`${name} gelöscht`);
+            loadDatabases();
+        } else {
+            const data = await resp.json();
+            showToast(`Fehler: ${data.detail}`, 'error');
+        }
+    } catch(e) {
+        showToast(`Fehler: ${e.message}`, 'error');
+    }
+}
+
+// Load on page load
+loadDatabases();
+</script>
+{% endblock %}

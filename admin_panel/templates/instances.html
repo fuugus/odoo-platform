@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Instanzen - Odoo Platform{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>🖥️ Instanz-Verwaltung</h1>
+    <p>Odoo-Instanzen erstellen, verwalten und löschen</p>
+</div>
+
+<div class="card">
+    <h3>Neue Instanz erstellen</h3>
+    <div class="form-grid">
+        <div class="form-row">
+            <label for="new-client">Client:</label>
+            <input type="text" id="new-client" placeholder="kaminfeger" value="kaminfeger">
+        </div>
+        <div class="form-row">
+            <label for="new-env">Environment:</label>
+            <select id="new-env" onchange="toggleDevName()">
+                <option value="prod">Production</option>
+                <option value="staging">Staging</option>
+                <option value="dev" selected>Development</option>
+            </select>
+        </div>
+        <div class="form-row" id="dev-name-row">
+            <label for="new-dev-name">Entwickler:</label>
+            <input type="text" id="new-dev-name" placeholder="samuel">
+        </div>
+        <div class="form-row">
+            <label for="new-port">Port:</label>
+            <input type="number" id="new-port" value="{{ next_port }}">
+        </div>
+    </div>
+    <button class="btn btn-primary" onclick="createInstance()">Instanz erstellen</button>
+    <div id="create-log" class="step-log" style="display:none;">
+        <pre></pre>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Aktive Instanzen</h3>
+    {% if instances %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Client</th>
+                <th>Env</th>
+                <th>Port</th>
+                <th>DB</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for name, inst in instances.items() %}
+            <tr id="row-{{ name }}">
+                <td><strong>{{ name }}</strong></td>
+                <td>{{ inst.client }}</td>
+                <td><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></td>
+                <td>{{ inst.port }}</td>
+                <td><code>{{ inst.db_name }}</code></td>
+                <td>
+                    <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
+                    {{ inst.status }}
+                </td>
+                <td class="actions">
+                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')">↻</button>
+                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')">⏹</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')">🗑️</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">Noch keine Instanzen erstellt.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Port-Schema</h3>
+    <table class="data-table">
+        <thead><tr><th>Port</th><th>Instanz</th></tr></thead>
+        <tbody>
+            <tr><td>8080</td><td>Admin Panel (dieses UI)</td></tr>
+            <tr><td>8069</td><td>Odoo Production</td></tr>
+            <tr><td>8070</td><td>Odoo Staging</td></tr>
+            <tr><td>8071+</td><td>Odoo Dev (pro Entwickler)</td></tr>
+            <tr><td>8025</td><td>Mailpit Web UI</td></tr>
+            <tr><td>1025</td><td>Mailpit SMTP</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleDevName() {
+    const env = document.getElementById('new-env').value;
+    document.getElementById('dev-name-row').style.display = env === 'dev' ? 'flex' : 'none';
+}
+
+function createInstance() {
+    const client = document.getElementById('new-client').value;
+    const env = document.getElementById('new-env').value;
+    const devName = document.getElementById('new-dev-name').value;
+    const port = parseInt(document.getElementById('new-port').value);
+
+    if (!client) { showToast('Client-Name erforderlich', 'error'); return; }
+    if (env === 'dev' && !devName) { showToast('Entwickler-Name erforderlich', 'error'); return; }
+
+    const logDiv = document.getElementById('create-log');
+    const logPre = logDiv.querySelector('pre');
+    logDiv.style.display = 'block';
+    logPre.textContent = 'Verbinde...\n';
+
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${location.host}/ws/instance/create`);
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({client, env, dev_name: devName, port}));
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'log') {
+            logPre.textContent += data.message + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        } else if (data.type === 'status' && data.status === 'done') {
+            logPre.textContent += '\n✓ Instanz erstellt!\n';
+            showToast('Instanz erstellt');
+            setTimeout(() => location.reload(), 2000);
+        } else if (data.type === 'error') {
+            logPre.textContent += `ERROR: ${data.message}\n`;
+            showToast('Fehler', 'error');
+        }
+    };
+}
+
+async function restartInstance(name) {
+    if (!confirm(`${name} neustarten?`)) return;
+    const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
+    resp.ok ? showToast('Neugestartet') : showToast('Fehler', 'error');
+    setTimeout(() => location.reload(), 2000);
+}
+
+async function stopInstance(name) {
+    if (!confirm(`${name} stoppen?`)) return;
+    await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
+    showToast('Gestoppt');
+    setTimeout(() => location.reload(), 1000);
+}
+
+async function deleteInstance(name) {
+    if (!confirm(`${name} wirklich LÖSCHEN? (inkl. Datenbank)`)) return;
+    if (!confirm(`Sicher? Das kann nicht rückgängig gemacht werden!`)) return;
+    const resp = await fetch(`/api/instances/${name}`, {method: 'DELETE'});
+    resp.ok ? showToast('Gelöscht') : showToast('Fehler', 'error');
+    setTimeout(() => location.reload(), 1000);
+}
+</script>
+{% endblock %}

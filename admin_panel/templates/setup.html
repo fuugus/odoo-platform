@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Setup Wizard - Odoo Platform{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>⚙️ Setup Wizard</h1>
+    <p>Klicke die Steps der Reihe nach durch. Jeder Step ist idempotent – nochmal drücken ist kein Problem.</p>
+</div>
+
+<div class="setup-config card">
+    <h3>Konfiguration</h3>
+    <div class="form-row">
+        <label for="domain">Domain:</label>
+        <input type="text" id="domain" value="{{ config.domain }}" placeholder="odoo.binaryone.ch">
+    </div>
+    <div class="form-row">
+        <label for="letsencrypt_email">Let's Encrypt E-Mail:</label>
+        <input type="email" id="letsencrypt_email" value="{{ config.letsencrypt_email }}" placeholder="admin@binaryone.ch">
+    </div>
+    <button class="btn btn-secondary" onclick="saveConfig()">Konfiguration speichern</button>
+</div>
+
+<div class="setup-steps">
+    {% for step_id, step in steps.items() %}
+    <div class="step-card card" id="step-{{ step_id }}" data-status="{{ step.status }}">
+        <div class="step-header">
+            <div class="step-info">
+                <span class="step-status-icon">
+                    {% if step.status == 'done' %}✅
+                    {% elif step.status == 'running' %}⏳
+                    {% elif step.status == 'error' %}❌
+                    {% else %}⬜{% endif %}
+                </span>
+                <h3>{{ step.label }}</h3>
+            </div>
+            <button class="btn btn-primary" onclick="runStep('{{ step_id }}')"
+                {% if step.status == 'running' %}disabled{% endif %}>
+                {% if step.status == 'done' %}Nochmal ausführen
+                {% elif step.status == 'running' %}Läuft...
+                {% elif step.status == 'error' %}Retry
+                {% else %}Ausführen{% endif %}
+            </button>
+        </div>
+        {% if step.message is defined and step.message %}
+        <div class="step-message {% if step.status == 'error' %}error{% endif %}">
+            {{ step.message }}
+        </div>
+        {% endif %}
+        <div class="step-log" id="log-{{ step_id }}" style="display:none;">
+            <pre></pre>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function saveConfig() {
+    const domain = document.getElementById('domain').value;
+    const email = document.getElementById('letsencrypt_email').value;
+    const resp = await fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({domain, letsencrypt_email: email})
+    });
+    if (resp.ok) {
+        showToast('Konfiguration gespeichert');
+    }
+}
+
+function runStep(stepId) {
+    const card = document.getElementById(`step-${stepId}`);
+    const btn = card.querySelector('button');
+    const logDiv = document.getElementById(`log-${stepId}`);
+    const logPre = logDiv.querySelector('pre');
+    const statusIcon = card.querySelector('.step-status-icon');
+
+    btn.disabled = true;
+    btn.textContent = 'Läuft...';
+    statusIcon.textContent = '⏳';
+    logDiv.style.display = 'block';
+    logPre.textContent = '';
+
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${location.host}/ws/setup/${stepId}`);
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'log') {
+            logPre.textContent += data.message + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        } else if (data.type === 'status') {
+            if (data.status === 'done') {
+                statusIcon.textContent = '✅';
+                btn.textContent = 'Nochmal ausführen';
+                btn.disabled = false;
+                card.dataset.status = 'done';
+            } else if (data.status === 'error') {
+                statusIcon.textContent = '❌';
+                btn.textContent = 'Retry';
+                btn.disabled = false;
+                card.dataset.status = 'error';
+            }
+        } else if (data.type === 'error') {
+            logPre.textContent += `ERROR: ${data.message}\n`;
+        }
+    };
+
+    ws.onerror = () => {
+        statusIcon.textContent = '❌';
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+        logPre.textContent += 'WebSocket connection error\n';
+    };
+
+    ws.onclose = () => {
+        if (btn.textContent === 'Läuft...') {
+            btn.textContent = 'Ausführen';
+            btn.disabled = false;
+        }
+    };
+}
+</script>
+{% endblock %}

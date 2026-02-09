@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Deploy - Odoo Platform{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>🚀 Deploy</h1>
+    <p>Git Pull → Modul Update → Service Restart</p>
+</div>
+
+<div class="card">
+    <h3>Deployment ausführen</h3>
+    <div class="form-grid">
+        <div class="form-row">
+            <label for="deploy-instance">Instanz:</label>
+            <select id="deploy-instance">
+                {% for name, inst in config.get('instances', {}).items() %}
+                <option value="{{ name }}">{{ name }} ({{ inst.env }}, :{{ inst.port }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="deploy-modules">Module:</label>
+            <input type="text" id="deploy-modules" placeholder="all (oder komma-separiert: sale,purchase)" value="all">
+        </div>
+    </div>
+    <button class="btn btn-primary" onclick="deploy()" id="deploy-btn">🚀 Deploy starten</button>
+</div>
+
+<div class="card" id="deploy-output" style="display:none;">
+    <h3>Deploy Output</h3>
+    <pre id="deploy-log"></pre>
+</div>
+
+<div class="card">
+    <h3>Workflow</h3>
+    <div class="workflow-steps">
+        <div class="workflow-step">
+            <span class="workflow-num">1</span>
+            <div>
+                <strong>Git Pull</strong>
+                <p>Zieht die neuesten Änderungen aus dem custom-addons Repository</p>
+            </div>
+        </div>
+        <div class="workflow-step">
+            <span class="workflow-num">2</span>
+            <div>
+                <strong>Service Restart</strong>
+                <p>Startet die Odoo-Instanz neu, damit neue Module geladen werden</p>
+            </div>
+        </div>
+        <div class="workflow-step">
+            <span class="workflow-num">3</span>
+            <div>
+                <strong>Modul-Update</strong>
+                <p>Odoo erkennt beim Start automatisch neue/geänderte Module</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Git Branch Konventionen</h3>
+    <table class="data-table">
+        <thead><tr><th>Pattern</th><th>Beispiel</th><th>Beschreibung</th></tr></thead>
+        <tbody>
+            <tr><td><code>{env}/{client}/{feature}</code></td><td><code>staging/kaminfeger/feuko-reports</code></td><td>Feature-Branch für Staging</td></tr>
+            <tr><td><code>dev/{client}/{feature}</code></td><td><code>dev/kaminfeger/new-wizard</code></td><td>Development Branch</td></tr>
+            <tr><td><code>main</code></td><td><code>main</code></td><td>Production Branch</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function deploy() {
+    const instance = document.getElementById('deploy-instance').value;
+    const modules = document.getElementById('deploy-modules').value;
+    const btn = document.getElementById('deploy-btn');
+    const outputDiv = document.getElementById('deploy-output');
+    const logPre = document.getElementById('deploy-log');
+
+    if (!instance) { showToast('Instanz auswählen', 'error'); return; }
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Deploying...';
+    outputDiv.style.display = 'block';
+    logPre.textContent = `Deploying to ${instance}...\n`;
+
+    try {
+        const resp = await fetch('/api/deploy', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({instance, modules})
+        });
+        const data = await resp.json();
+
+        if (resp.ok) {
+            logPre.textContent += `\nGit Output:\n${data.git_output || '(no output)'}\n`;
+            logPre.textContent += `\n✓ Deploy erfolgreich! Instanz ${data.instance} neugestartet.\n`;
+            showToast('Deploy erfolgreich');
+        } else {
+            logPre.textContent += `\n✗ Fehler: ${data.detail}\n`;
+            showToast('Deploy fehlgeschlagen', 'error');
+        }
+    } catch(e) {
+        logPre.textContent += `\n✗ Fehler: ${e.message}\n`;
+        showToast('Deploy fehlgeschlagen', 'error');
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🚀 Deploy starten';
+}
+</script>
+{% endblock %}

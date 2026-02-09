@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Odoo Platform{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📊 Dashboard</h1>
+    <p>Übersicht aller Odoo-Instanzen und Services</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card card">
+        <div class="stat-value">{{ instances | length }}</div>
+        <div class="stat-label">Instanzen</div>
+    </div>
+    <div class="stat-card card">
+        <div class="stat-value">{{ instances.values() | selectattr('status', 'equalto', 'active') | list | length }}</div>
+        <div class="stat-label">Aktiv</div>
+    </div>
+    <div class="stat-card card">
+        <div class="stat-value" id="cpu-usage">–</div>
+        <div class="stat-label">CPU %</div>
+    </div>
+    <div class="stat-card card">
+        <div class="stat-value" id="mem-usage">–</div>
+        <div class="stat-label">RAM %</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Instanzen</h3>
+    {% if instances %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Client</th>
+                <th>Environment</th>
+                <th>Port</th>
+                <th>Datenbank</th>
+                <th>Status</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for name, inst in instances.items() %}
+            <tr>
+                <td><strong>{{ name }}</strong></td>
+                <td>{{ inst.client }}</td>
+                <td><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></td>
+                <td>{{ inst.port }}</td>
+                <td><code>{{ inst.db_name }}</code></td>
+                <td>
+                    <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
+                    {{ inst.status }}
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')">↻ Restart</button>
+                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')">⏹ Stop</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">Keine Instanzen vorhanden. <a href="/instances">Erstelle eine neue Instanz</a>.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Quick Links</h3>
+    <div class="quick-links">
+        {% for name, inst in instances.items() %}
+        <a href="http://{{ config.domain }}:{{ inst.port }}" target="_blank" class="quick-link">
+            🌐 {{ name }} (:{{ inst.port }})
+        </a>
+        {% endfor %}
+        <a href="http://{{ config.domain }}:8025" target="_blank" class="quick-link">
+            📧 Mailpit (:8025)
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function restartInstance(name) {
+    if (!confirm(`Instanz ${name} neustarten?`)) return;
+    const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
+    if (resp.ok) {
+        showToast(`${name} wird neugestartet...`);
+        setTimeout(() => location.reload(), 3000);
+    } else {
+        showToast('Fehler beim Neustarten', 'error');
+    }
+}
+
+async function stopInstance(name) {
+    if (!confirm(`Instanz ${name} stoppen?`)) return;
+    const resp = await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
+    if (resp.ok) {
+        showToast(`${name} gestoppt`);
+        setTimeout(() => location.reload(), 1000);
+    }
+}
+
+// Update system stats
+async function updateStats() {
+    try {
+        const resp = await fetch('/api/health');
+        // For now just show placeholder - could add psutil endpoint
+    } catch(e) {}
+}
+updateStats();
+</script>
+{% endblock %}

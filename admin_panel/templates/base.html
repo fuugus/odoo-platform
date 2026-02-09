@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Odoo Platform{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h2>🚀 Odoo Platform</h2>
+            <span class="version">v1.0</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/setup" class="{% if request.url.path == '/setup' %}active{% endif %}">
+                <span class="icon">⚙️</span> Setup Wizard
+            </a></li>
+            <li><a href="/dashboard" class="{% if request.url.path == '/dashboard' %}active{% endif %}">
+                <span class="icon">📊</span> Dashboard
+            </a></li>
+            <li><a href="/instances" class="{% if request.url.path == '/instances' %}active{% endif %}">
+                <span class="icon">🖥️</span> Instanzen
+            </a></li>
+            <li><a href="/deploy" class="{% if request.url.path == '/deploy' %}active{% endif %}">
+                <span class="icon">🚀</span> Deploy
+            </a></li>
+            <li><a href="/databases" class="{% if request.url.path == '/databases' %}active{% endif %}">
+                <span class="icon">🗄️</span> Datenbanken
+            </a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <a href="/api/health" target="_blank">API Health</a>
+        </div>
+    </nav>
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+    <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
