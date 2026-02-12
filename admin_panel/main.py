@@ -24,14 +24,19 @@ def get_public_ip() -> str:
     global _public_ip_cache
     if _public_ip_cache is not None:
         return _public_ip_cache
-    try:
-        result = subprocess.run(
-            ["curl", "-s", "--max-time", "5", "https://ifconfig.me"],
-            capture_output=True, text=True, timeout=10
-        )
-        _public_ip_cache = result.stdout.strip() or "–"
-    except Exception:
-        _public_ip_cache = "–"
+    for url in ["https://api.ipify.org", "https://icanhazip.com", "https://ifconfig.me"]:
+        try:
+            result = subprocess.run(
+                ["curl", "-s", "--max-time", "3", url],
+                capture_output=True, text=True, timeout=5
+            )
+            ip = result.stdout.strip()
+            if ip and not ip.startswith("<"):
+                _public_ip_cache = ip
+                return _public_ip_cache
+        except Exception:
+            continue
+    _public_ip_cache = "–"
     return _public_ip_cache
 
 app = FastAPI(title="Odoo Deployment Platform", version="1.0.0")
