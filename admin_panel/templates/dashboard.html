@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>📊 Dashboard</h1>
+    <h1>Dashboard</h1>
     <p>Übersicht aller Odoo-Instanzen und Services</p>
 </div>
 
@@ -54,8 +54,8 @@
                     {{ inst.status }}
                 </td>
                 <td>
-                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')">↻ Restart</button>
-                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')">⏹ Stop</button>
+                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')"><span class="icon icon-refresh"></span> Restart</button>
+                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')"><span class="icon icon-stop"></span> Stop</button>
                 </td>
             </tr>
             {% endfor %}
@@ -71,11 +71,11 @@
     <div class="quick-links">
         {% for name, inst in instances.items() %}
         <a href="http://{{ config.domain }}:{{ inst.port }}" target="_blank" class="quick-link">
-            🌐 {{ name }} (:{{ inst.port }})
+            <span class="icon icon-link"></span> {{ name }} (:{{ inst.port }})
         </a>
         {% endfor %}
         <a href="http://{{ config.domain }}:8025" target="_blank" class="quick-link">
-            📧 Mailpit (:8025)
+            <span class="icon icon-mail"></span> Mailpit (:8025)
         </a>
     </div>
 </div>

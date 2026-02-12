@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>⚙️ Setup Wizard</h1>
+    <h1>Setup Wizard</h1>
     <p>Klicke die Steps der Reihe nach durch. Jeder Step ist idempotent – nochmal drücken ist kein Problem.</p>
 </div>
 
@@ -26,10 +26,10 @@
         <div class="step-header">
             <div class="step-info">
                 <span class="step-status-icon">
-                    {% if step.status == 'done' %}✅
-                    {% elif step.status == 'running' %}⏳
-                    {% elif step.status == 'error' %}❌
-                    {% else %}⬜{% endif %}
+                    {% if step.status == 'done' %}<span class="icon icon-check"></span>
+                    {% elif step.status == 'running' %}<span class="icon icon-clock"></span>
+                    {% elif step.status == 'error' %}<span class="icon icon-x"></span>
+                    {% else %}<span class="icon icon-minus"></span>{% endif %}
                 </span>
                 <h3>{{ step.label }}</h3>
             </div>
@@ -78,7 +78,7 @@ function runStep(stepId) {
 
     btn.disabled = true;
     btn.textContent = 'Läuft...';
-    statusIcon.textContent = '⏳';
+    statusIcon.innerHTML = '<span class="icon icon-clock"></span>';
     logDiv.style.display = 'block';
     logPre.textContent = '';
 
@@ -92,12 +92,12 @@ function runStep(stepId) {
             logDiv.scrollTop = logDiv.scrollHeight;
         } else if (data.type === 'status') {
             if (data.status === 'done') {
-                statusIcon.textContent = '✅';
+                statusIcon.innerHTML = '<span class="icon icon-check"></span>';
                 btn.textContent = 'Nochmal ausführen';
                 btn.disabled = false;
                 card.dataset.status = 'done';
             } else if (data.status === 'error') {
-                statusIcon.textContent = '❌';
+                statusIcon.innerHTML = '<span class="icon icon-x"></span>';
                 btn.textContent = 'Retry';
                 btn.disabled = false;
                 card.dataset.status = 'error';
@@ -108,7 +108,7 @@ function runStep(stepId) {
     };
 
     ws.onerror = () => {
-        statusIcon.textContent = '❌';
+        statusIcon.innerHTML = '<span class="icon icon-x"></span>';
         btn.textContent = 'Retry';
         btn.disabled = false;
         logPre.textContent += 'WebSocket connection error\n';

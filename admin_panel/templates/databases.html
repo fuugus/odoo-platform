@@ -3,13 +3,13 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>🗄️ Datenbank-Verwaltung</h1>
+    <h1>Datenbank-Verwaltung</h1>
     <p>PostgreSQL-Datenbanken erstellen, klonen und löschen</p>
 </div>
 
 <div class="card">
     <h3>Datenbanken</h3>
-    <button class="btn btn-secondary" onclick="loadDatabases()">🔄 Aktualisieren</button>
+    <button class="btn btn-secondary" onclick="loadDatabases()"><span class="icon icon-refresh"></span> Aktualisieren</button>
     <table class="data-table" id="db-table">
         <thead>
             <tr>
@@ -36,7 +36,7 @@
             <input type="text" id="clone-target" placeholder="kaminfeger_staging">
         </div>
     </div>
-    <button class="btn btn-primary" onclick="cloneDb()">📋 Klonen</button>
+    <button class="btn btn-primary" onclick="cloneDb()"><span class="icon icon-clone"></span> Klonen</button>
 </div>
 
 <div class="card">
@@ -77,7 +77,7 @@ async function loadDatabases() {
             tr.innerHTML = `
                 <td><code>${db}</code> ${isSystem ? '<span class="badge badge-system">system</span>' : ''}</td>
                 <td>
-                    ${isSystem ? '' : `<button class="btn btn-sm btn-danger" onclick="deleteDb('${db}')">🗑️ Löschen</button>`}
+                    ${isSystem ? '' : `<button class="btn btn-sm btn-danger" onclick="deleteDb('${db}')"><span class="icon icon-trash"></span> Löschen</button>`}
                 </td>
             `;
             tbody.appendChild(tr);

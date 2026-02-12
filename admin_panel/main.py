@@ -22,6 +22,18 @@ app = FastAPI(title="Odoo Deployment Platform", version="1.0.0")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+STATIC_DIR = Path(__file__).parent / "static"
+
+def _static_url(path: str) -> str:
+    """Return /static/path?v=<mtime> for cache-busting."""
+    try:
+        mtime = int((STATIC_DIR / path).stat().st_mtime)
+    except OSError:
+        mtime = 0
+    return f"/static/{path}?v={mtime}"
+
+templates.env.globals["static_url"] = _static_url
+
 
 # ─── Helper ─────────────────────────────────────────────────────────────────
 

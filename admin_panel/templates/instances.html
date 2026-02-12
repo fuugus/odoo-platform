@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>🖥️ Instanz-Verwaltung</h1>
+    <h1>Instanz-Verwaltung</h1>
     <p>Odoo-Instanzen erstellen, verwalten und löschen</p>
 </div>
 
@@ -65,9 +65,9 @@
                     {{ inst.status }}
                 </td>
                 <td class="actions">
-                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')">↻</button>
-                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')">⏹</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')">🗑️</button>
+                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')"><span class="icon icon-refresh"></span></button>
+                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')"><span class="icon icon-stop"></span></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')"><span class="icon icon-trash"></span></button>
                 </td>
             </tr>
             {% endfor %}
