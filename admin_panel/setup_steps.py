@@ -28,7 +28,10 @@ async def run_cmd(cmd: str, ws_send=None, env=None) -> tuple[int, str]:
         if ws_send:
             await ws_send(decoded)
     await proc.wait()
-    return proc.returncode, "\n".join(output_lines)
+    output = "\n".join(output_lines)
+    if proc.returncode != 0:
+        raise RuntimeError(f"Command failed (exit {proc.returncode}): {cmd}")
+    return proc.returncode, output
 
 
 # ─── Step 1: System Update ──────────────────────────────────────────────────
@@ -46,7 +49,7 @@ async def step_system_update(ws_send=None):
             "libtiff5-dev libjpeg8-dev libopenjp2-7-dev zlib1g-dev "
             "libfreetype6-dev liblcms2-dev libwebp-dev libharfbuzz-dev "
             "libfribidi-dev libxcb1-dev libpq-dev "
-            "node-less npm xfonts-75dpi xfonts-base fontconfig",
+            "xfonts-75dpi xfonts-base fontconfig",
             ws_send,
         )
         update_step_status("system_update", "done")
@@ -123,36 +126,60 @@ async def step_wkhtmltopdf(ws_send=None):
         raise
 
 
-# ─── Step 4: Odoo 19 Source Install ─────────────────────────────────────────
+# ─── Step 4: Odoo 19 Enterprise Source Install ──────────────────────────────
 
 async def step_odoo_source(ws_send=None):
-    """Clone Odoo 19 from GitHub and install Python dependencies."""
+    """Clone Odoo 19 Community + Enterprise from GitHub and install Python dependencies."""
     update_step_status("odoo_source", "running")
     try:
+        config = load_config()
+        github_token = config.get("github_token", "")
+        if not github_token:
+            raise RuntimeError("GitHub token is required for Enterprise repo. Set it in the config above.")
+
         odoo_dir = "/opt/odoo"
         odoo_src = f"{odoo_dir}/odoo"
+        enterprise_src = f"{odoo_dir}/enterprise"
         custom_addons = f"{odoo_dir}/custom-addons"
         venv_dir = f"{odoo_dir}/venv"
 
+        community_url = "https://github.com/odoo/odoo.git"
+        enterprise_url = f"https://{github_token}@github.com/odoo/enterprise.git"
+
         # Create odoo system user (idempotent)
         await run_cmd(
-            "id -u odoo &>/dev/null || useradd -m -d /opt/odoo -U -r -s /bin/bash odoo",
+            "id -u odoo >/dev/null 2>&1 || useradd -m -d /opt/odoo -U -r -s /bin/bash odoo",
             ws_send,
         )
 
         # Create directories
-        await run_cmd(f"mkdir -p {odoo_src} {custom_addons}", ws_send)
+        await run_cmd(f"mkdir -p {odoo_src} {enterprise_src} {custom_addons}", ws_send)
 
-        # Clone Odoo source
+        # Clone Odoo Community
+        if ws_send:
+            await ws_send("Cloning Odoo 19 Community...")
         if not Path(f"{odoo_src}/.git").exists():
             await run_cmd(
-                f"git clone --depth 1 --branch 19.0 https://github.com/odoo/odoo.git {odoo_src}",
+                f"git clone --depth 1 --branch 19.0 {community_url} {odoo_src}",
                 ws_send,
             )
         else:
             await run_cmd(f"cd {odoo_src} && git pull", ws_send)
             if ws_send:
-                await ws_send("Odoo source already cloned, pulled latest")
+                await ws_send("Community already cloned, pulled latest")
+
+        # Clone Odoo Enterprise
+        if ws_send:
+            await ws_send("Cloning Odoo 19 Enterprise...")
+        if not Path(f"{enterprise_src}/.git").exists():
+            await run_cmd(
+                f"git clone --depth 1 --branch 19.0 {enterprise_url} {enterprise_src}",
+                ws_send,
+            )
+        else:
+            await run_cmd(f"cd {enterprise_src} && git pull", ws_send)
+            if ws_send:
+                await ws_send("Enterprise already cloned, pulled latest")
 
         # Create venv and install deps
         if not Path(venv_dir).exists():
@@ -172,7 +199,7 @@ async def step_odoo_source(ws_send=None):
 
         update_step_status("odoo_source", "done")
         if ws_send:
-            await ws_send("✓ Odoo 19 source installed")
+            await ws_send("✓ Odoo 19 Community + Enterprise installed")
     except Exception as e:
         update_step_status("odoo_source", "error", str(e))
         if ws_send:
@@ -186,71 +213,33 @@ async def step_nginx(ws_send=None):
     """Install Nginx and configure wildcard reverse proxy."""
     update_step_status("nginx", "running")
     try:
-        config = load_config()
-        domain = config.get("domain", "odoo.binaryone.ch")
-
         await run_cmd("apt-get install -y nginx certbot python3-certbot-nginx", ws_send)
 
-        # Create Nginx config for wildcard routing
-        nginx_conf = f"""
+        # Domain-agnostic Nginx config: routing is based on subdomain prefix
+        # patterns only (client-prod., client-staging., admin.), so the actual
+        # domain can be changed at any time without regenerating this config.
+        nginx_conf = """
 # Odoo Platform - Wildcard Reverse Proxy
-map $host $odoo_port {{
-    ~^(?P<client>[^-]+)-prod\\.{domain.replace('.', '\\.')}$  8069;
-    ~^(?P<client>[^-]+)-staging\\.{domain.replace('.', '\\.')}$  8070;
-    ~^(?P<client>[^-]+)-dev-(?P<dev>[^.]+)\\.{domain.replace('.', '\\.')}$  8071;
-    default  8069;
-}}
+# Routes by subdomain prefix, independent of the base domain.
+# client-prod.*  -> 8069
+# client-staging.* -> 8070
+# client-dev-*.*  -> 8071
+# admin.*        -> 8080 (admin panel)
+# mailpit.*      -> 8025 (mail catch-all UI)
 
-map $host $odoo_dbfilter {{
-    ~^(?P<client>[^-]+)-prod\\.  ^${{client}}_prod$;
-    ~^(?P<client>[^-]+)-staging\\.  ^${{client}}_staging$;
-    ~^(?P<client>[^-]+)-dev-(?P<dev>[^.]+)\\.  ^${{client}}_dev_${{dev}}$;
-    default  .*;
-}}
+map $host $odoo_port {
+    ~^[^-]+-prod\\.    8069;
+    ~^[^-]+-staging\\. 8070;
+    ~^[^-]+-dev-       8071;
+    default            8069;
+}
 
-upstream odoo_backend {{
-    server 127.0.0.1:8069;
-}}
-
-server {{
+# Admin Panel (matched first via regex, before the default_server catch-all)
+server {
     listen 80;
-    server_name *.{domain};
+    server_name ~^admin\\.;
 
-    # Proxy headers
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-
-    # Odoo longpolling
-    location /longpolling {{
-        proxy_pass http://127.0.0.1:8072;
-    }}
-
-    # Odoo websocket
-    location /websocket {{
-        proxy_pass http://127.0.0.1:$odoo_port;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }}
-
-    # Main Odoo
-    location / {{
-        proxy_pass http://127.0.0.1:$odoo_port;
-        proxy_read_timeout 720s;
-        proxy_connect_timeout 720s;
-        proxy_send_timeout 720s;
-        client_max_body_size 200m;
-    }}
-}}
-
-# Admin Panel
-server {{
-    listen 80;
-    server_name admin.{domain};
-
-    location / {{
+    location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -259,8 +248,55 @@ server {{
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-    }}
-}}
+    }
+}
+
+# Mailpit web UI
+server {
+    listen 80;
+    server_name ~^mailpit\\.;
+
+    location / {
+        proxy_pass http://127.0.0.1:8025;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+# Odoo instances (catch-all)
+server {
+    listen 80 default_server;
+    server_name _;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location /longpolling {
+        proxy_pass http://127.0.0.1:8072;
+    }
+
+    location /websocket {
+        proxy_pass http://127.0.0.1:$odoo_port;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:$odoo_port;
+        proxy_read_timeout 720s;
+        proxy_connect_timeout 720s;
+        proxy_send_timeout 720s;
+        client_max_body_size 200m;
+    }
+}
 """
         conf_path = "/etc/nginx/sites-available/odoo-platform"
         with open(conf_path, "w") as f:
@@ -281,7 +317,7 @@ server {{
             await ws_send("✓ Nginx installed and configured")
             await ws_send(
                 "Note: Run certbot manually for wildcard SSL "
-                f"(requires DNS challenge for *.{domain})"
+                "(requires DNS challenge for your wildcard domain)"
             )
     except Exception as e:
         update_step_status("nginx", "error", str(e))
@@ -298,7 +334,7 @@ async def step_mailpit(ws_send=None):
     try:
         # Install Mailpit via official install script
         await run_cmd(
-            "bash < <(curl -sL https://raw.githubusercontent.com/axllent/mailpit/develop/install.sh)",
+            "curl -sL https://raw.githubusercontent.com/axllent/mailpit/develop/install.sh | bash",
             ws_send,
         )
 
@@ -333,23 +369,6 @@ WantedBy=multi-user.target
         raise
 
 
-# ─── Step 7: First Odoo Instance (prod) ─────────────────────────────────────
-
-async def step_first_instance(ws_send=None, client_name="kaminfeger"):
-    """Create the first production Odoo instance."""
-    update_step_status("first_instance", "running")
-    try:
-        await create_odoo_instance(client_name, "prod", 8069, ws_send)
-        update_step_status("first_instance", "done")
-        if ws_send:
-            await ws_send(f"✓ First Odoo instance created: {client_name}_prod on port 8069")
-    except Exception as e:
-        update_step_status("first_instance", "error", str(e))
-        if ws_send:
-            await ws_send(f"✗ Error: {e}")
-        raise
-
-
 # ─── Instance Management ────────────────────────────────────────────────────
 
 async def create_odoo_instance(client: str, env: str, port: int, ws_send=None):
@@ -379,7 +398,7 @@ db_user = odoo
 db_password = False
 db_name = {db_name}
 dbfilter = ^{db_name}$
-addons_path = /opt/odoo/odoo/addons,/opt/odoo/custom-addons
+addons_path = /opt/odoo/enterprise,/opt/odoo/odoo/addons,/opt/odoo/custom-addons
 data_dir = {data_dir}
 logfile = {log_dir}/{instance_name}.log
 log_level = info
@@ -482,5 +501,4 @@ SETUP_STEPS = {
     "odoo_source": step_odoo_source,
     "nginx": step_nginx,
     "mailpit": step_mailpit,
-    "first_instance": step_first_instance,
 }

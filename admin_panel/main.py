@@ -16,6 +16,24 @@ from fastapi.templating import Jinja2Templates
 from config import load_config, save_config, PLATFORM_DIR
 from setup_steps import SETUP_STEPS, create_odoo_instance, delete_odoo_instance, run_cmd
 
+_public_ip_cache = None
+
+
+def get_public_ip() -> str:
+    """Detect the server's public IP address (cached)."""
+    global _public_ip_cache
+    if _public_ip_cache is not None:
+        return _public_ip_cache
+    try:
+        result = subprocess.run(
+            ["curl", "-s", "--max-time", "5", "https://ifconfig.me"],
+            capture_output=True, text=True, timeout=10
+        )
+        _public_ip_cache = result.stdout.strip() or "–"
+    except Exception:
+        _public_ip_cache = "–"
+    return _public_ip_cache
+
 app = FastAPI(title="Odoo Deployment Platform", version="1.0.0")
 
 # Static files and templates
@@ -99,6 +117,7 @@ async def dashboard_page(request: Request):
         "request": request,
         "config": config,
         "instances": instances,
+        "public_ip": get_public_ip(),
     })
 
 
@@ -374,6 +393,16 @@ async def ws_create_instance(websocket: WebSocket):
 
 
 # ─── Health Check ────────────────────────────────────────────────────────────
+
+@app.get("/api/server-info")
+async def api_server_info():
+    """Server info including public IP and domain."""
+    config = load_config()
+    return {
+        "public_ip": get_public_ip(),
+        "domain": config.get("domain", ""),
+    }
+
 
 @app.get("/api/health")
 async def health():

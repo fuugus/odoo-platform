@@ -465,13 +465,13 @@ input:focus, select:focus {
     word-break: break-all;
 }
 
-.step-message {
+.step-description {
     margin-top: 8px;
     font-size: 13px;
     color: var(--text-muted);
 }
 
-.step-message.error {
+.step-description .error {
     color: var(--error);
 }
 
@@ -482,7 +482,7 @@ input:focus, select:focus {
 }
 
 .setup-config .form-row {
-    max-width: 400px;
+    max-width: 560px;
 }
 
 /* ─── Deploy Log ─────────────────────────────────────────────────────────── */

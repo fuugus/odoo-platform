@@ -27,56 +27,39 @@
 </div>
 
 <div class="card">
-    <h3>Instanzen</h3>
-    {% if instances %}
+    <h3>Server & DNS</h3>
     <table class="data-table">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Client</th>
-                <th>Environment</th>
-                <th>Port</th>
-                <th>Datenbank</th>
-                <th>Status</th>
-                <th>Aktionen</th>
-            </tr>
-        </thead>
         <tbody>
-            {% for name, inst in instances.items() %}
             <tr>
-                <td><strong>{{ name }}</strong></td>
-                <td>{{ inst.client }}</td>
-                <td><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></td>
-                <td>{{ inst.port }}</td>
-                <td><code>{{ inst.db_name }}</code></td>
+                <td><strong>Public IP</strong></td>
+                <td><code>{{ public_ip }}</code></td>
+            </tr>
+            <tr>
+                <td><strong>Domain</strong></td>
+                <td><code>{{ config.domain }}</code></td>
+            </tr>
+            <tr>
+                <td><strong>Admin Panel</strong></td>
                 <td>
-                    <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
-                    {{ inst.status }}
-                </td>
-                <td>
-                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')"><span class="icon icon-refresh"></span> Restart</button>
-                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')"><span class="icon icon-stop"></span> Stop</button>
+                    <code>admin.{{ config.domain }}</code> &rarr;
+                    <a href="http://{{ public_ip }}:8080" target="_blank"><code>{{ public_ip }}:8080</code></a>
                 </td>
             </tr>
-            {% endfor %}
+            <tr>
+                <td><strong>Mailpit</strong></td>
+                <td>
+                    <code>mailpit.{{ config.domain }}</code> &rarr;
+                    <a href="http://{{ public_ip }}:8025" target="_blank"><code>{{ public_ip }}:8025</code></a>
+                </td>
+            </tr>
         </tbody>
     </table>
-    {% else %}
-    <p class="empty-state">Keine Instanzen vorhanden. <a href="/instances">Erstelle eine neue Instanz</a>.</p>
-    {% endif %}
-</div>
-
-<div class="card">
-    <h3>Quick Links</h3>
-    <div class="quick-links">
-        {% for name, inst in instances.items() %}
-        <a href="http://{{ config.domain }}:{{ inst.port }}" target="_blank" class="quick-link">
-            <span class="icon icon-link"></span> {{ name }} (:{{ inst.port }})
-        </a>
-        {% endfor %}
-        <a href="http://{{ config.domain }}:8025" target="_blank" class="quick-link">
-            <span class="icon icon-mail"></span> Mailpit (:8025)
-        </a>
+    <div style="margin-top: 16px; color: var(--text-muted); font-size: 13px; line-height: 1.7;">
+        <strong style="color: var(--text);">DNS setup</strong> &mdash; create one wildcard A record at your DNS provider:<br>
+        <code>*.{{ config.domain }}</code> &rarr; A &rarr; <code>{{ public_ip }}</code><br>
+        <br>
+        This covers all subdomains: <code>admin</code>, <code>mailpit</code>, <code>client-prod</code>, <code>client-staging</code>, <code>client-dev-name</code>, etc.
+        Nginx listens on port 80, reads the <code>Host</code> header, and proxies to the correct Odoo port. No IP configuration is needed on the server itself.
     </div>
 </div>
 {% endblock %}

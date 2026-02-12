@@ -12,16 +12,16 @@ CONFIG_FILE = PLATFORM_DIR / "platform.json"
 DEFAULT_CONFIG = {
     "domain": "odoo.binaryone.ch",
     "letsencrypt_email": "",
+    "github_token": "",
     "odoo_version": "19.0",
     "pg_version": "16",
     "setup_steps": {
-        "system_update": {"status": "pending", "label": "System Update & Pakete"},
-        "postgresql": {"status": "pending", "label": "PostgreSQL 16"},
-        "wkhtmltopdf": {"status": "pending", "label": "wkhtmltopdf"},
-        "odoo_source": {"status": "pending", "label": "Odoo 19 Source-Install"},
-        "nginx": {"status": "pending", "label": "Nginx + Wildcard SSL"},
-        "mailpit": {"status": "pending", "label": "Mailpit"},
-        "first_instance": {"status": "pending", "label": "Erste Odoo-Instanz (prod)"},
+        "system_update": {"status": "pending", "label": "System Update & Pakete", "description": "Installs build tools, Python dev headers, and image libraries."},
+        "postgresql": {"status": "pending", "label": "PostgreSQL 16", "description": "Adds the official PostgreSQL repo and installs v16."},
+        "wkhtmltopdf": {"status": "pending", "label": "wkhtmltopdf", "description": "Patched Qt build required by Odoo for PDF reports."},
+        "odoo_source": {"status": "pending", "label": "Odoo 19 Enterprise Source-Install", "description": "Clones Community + Enterprise repos. Requires GitHub token above."},
+        "nginx": {"status": "pending", "label": "Nginx + Wildcard SSL", "description": "Reverse proxy routing subdomains to Odoo instances by port."},
+        "mailpit": {"status": "pending", "label": "Mailpit", "description": "Local SMTP catch-all for dev/staging emails."},
     },
     "instances": {},
     "clients": {},
@@ -48,7 +48,6 @@ def update_step_status(step_id: str, status: str, message: str = ""):
     config = load_config()
     if step_id in config["setup_steps"]:
         config["setup_steps"][step_id]["status"] = status
-        if message:
-            config["setup_steps"][step_id]["message"] = message
+        config["setup_steps"][step_id]["message"] = message
     save_config(config)
     return config
