@@ -221,20 +221,20 @@ async def step_nginx(ws_send=None):
         nginx_conf = """
 # Odoo Platform - Wildcard Reverse Proxy
 # Routes by subdomain prefix, independent of the base domain.
-# client-prod.*  -> 8069
+# client-prod.*    -> 8069
 # client-staging.* -> 8070
-# client-dev-*.*  -> 8071
-# admin.*        -> 8080 (admin panel)
-# mailpit.*      -> 8025 (mail catch-all UI)
+# client-dev-*.*   -> 8071
+# admin.*          -> 8080 (admin panel)
+# mailpit.*        -> 8025 (mail catch-all UI)
 
 map $host $odoo_port {
     ~^[^-]+-prod\\.    8069;
     ~^[^-]+-staging\\. 8070;
     ~^[^-]+-dev-       8071;
-    default            8069;
+    default            0;
 }
 
-# Admin Panel (matched first via regex, before the default_server catch-all)
+# Admin Panel
 server {
     listen 80;
     server_name ~^admin\\.;
@@ -268,10 +268,10 @@ server {
     }
 }
 
-# Odoo instances (catch-all)
+# Odoo instances (only matched subdomains)
 server {
-    listen 80 default_server;
-    server_name _;
+    listen 80;
+    server_name ~^[^-]+-(?:prod|staging|dev-)\\S+\\.;
 
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -295,6 +295,17 @@ server {
         proxy_connect_timeout 720s;
         proxy_send_timeout 720s;
         client_max_body_size 200m;
+    }
+}
+
+# Default: bare IP or unknown subdomain
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location / {
+        default_type text/plain;
+        return 200 "Odoo Platform is running. Configure DNS: *.your-domain -> this IP\\n";
     }
 }
 """
@@ -371,8 +382,21 @@ WantedBy=multi-user.target
 
 # ─── Instance Management ────────────────────────────────────────────────────
 
-async def create_odoo_instance(client: str, env: str, port: int, ws_send=None):
+ENV_PORTS = {"prod": 8069, "staging": 8070}
+
+
+def port_for_env(env: str, explicit_port: int | None = None) -> int:
+    """Return the port for an environment, matching Nginx routing conventions."""
+    if explicit_port is not None:
+        return explicit_port
+    if env in ENV_PORTS:
+        return ENV_PORTS[env]
+    return 8071  # all dev-* environments
+
+
+async def create_odoo_instance(client: str, env: str, port: int | None = None, ws_send=None):
     """Create a new Odoo instance with its own systemd service and config."""
+    port = port_for_env(env, port)
     instance_name = f"{client}_{env}"
     db_name = instance_name
     conf_dir = "/etc/odoo"
@@ -380,6 +404,7 @@ async def create_odoo_instance(client: str, env: str, port: int, ws_send=None):
     data_dir = f"/opt/odoo/data/{instance_name}"
 
     await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir}", ws_send)
+    await run_cmd(f"chown odoo:odoo {data_dir} {log_dir}", ws_send)
 
     # Determine SMTP settings
     if env == "prod":
@@ -392,8 +417,8 @@ async def create_odoo_instance(client: str, env: str, port: int, ws_send=None):
     # Create Odoo config file
     odoo_conf = f"""[options]
 admin_passwd = admin
-db_host = localhost
-db_port = 5432
+db_host = False
+db_port = False
 db_user = odoo
 db_password = False
 db_name = {db_name}
