@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Instanzen - Odoo Platform{% endblock %}
+{% block title %}Instances - Odoo Platform{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Instanz-Verwaltung</h1>
-    <p>Odoo-Instanzen erstellen, verwalten und löschen</p>
+    <h1>Instance Management</h1>
+    <p>Create, manage, and delete Odoo instances</p>
 </div>
 
 <div class="card">
-    <h3>Neue Instanz erstellen</h3>
+    <h3>Create New Instance</h3>
     <div class="form-grid">
         <div class="form-row">
             <label for="new-client">Client:</label>
@@ -23,7 +23,7 @@
             </select>
         </div>
         <div class="form-row" id="dev-name-row">
-            <label for="new-dev-name">Entwickler:</label>
+            <label for="new-dev-name">Developer:</label>
             <input type="text" id="new-dev-name" placeholder="samuel">
         </div>
         <div class="form-row">
@@ -31,14 +31,14 @@
             <input type="number" id="new-port" value="{{ next_port }}">
         </div>
     </div>
-    <button class="btn btn-primary" onclick="createInstance()">Instanz erstellen</button>
+    <button class="btn btn-primary" onclick="createInstance()">Create Instance</button>
     <div id="create-log" class="step-log" style="display:none;">
         <pre></pre>
     </div>
 </div>
 
 <div class="card">
-    <h3>Aktive Instanzen</h3>
+    <h3>Active Instances</h3>
     {% if instances %}
     <table class="data-table">
         <thead>
@@ -49,7 +49,7 @@
                 <th>Port</th>
                 <th>DB</th>
                 <th>Status</th>
-                <th>Aktionen</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -74,19 +74,19 @@
         </tbody>
     </table>
     {% else %}
-    <p class="empty-state">Noch keine Instanzen erstellt.</p>
+    <p class="empty-state">No instances created yet.</p>
     {% endif %}
 </div>
 
 <div class="card">
-    <h3>Port-Schema</h3>
+    <h3>Port Schema</h3>
     <table class="data-table">
-        <thead><tr><th>Port</th><th>Instanz</th></tr></thead>
+        <thead><tr><th>Port</th><th>Instance</th></tr></thead>
         <tbody>
-            <tr><td>8080</td><td>Admin Panel (dieses UI)</td></tr>
+            <tr><td>8080</td><td>Admin Panel (this UI)</td></tr>
             <tr><td>8069</td><td>Odoo Production</td></tr>
             <tr><td>8070</td><td>Odoo Staging</td></tr>
-            <tr><td>8071+</td><td>Odoo Dev (pro Entwickler)</td></tr>
+            <tr><td>8071+</td><td>Odoo Dev (per developer)</td></tr>
             <tr><td>8025</td><td>Mailpit Web UI</td></tr>
             <tr><td>1025</td><td>Mailpit SMTP</td></tr>
         </tbody>
@@ -107,13 +107,13 @@ function createInstance() {
     const devName = document.getElementById('new-dev-name').value;
     const port = parseInt(document.getElementById('new-port').value);
 
-    if (!client) { showToast('Client-Name erforderlich', 'error'); return; }
-    if (env === 'dev' && !devName) { showToast('Entwickler-Name erforderlich', 'error'); return; }
+    if (!client) { showToast('Client name required', 'error'); return; }
+    if (env === 'dev' && !devName) { showToast('Developer name required', 'error'); return; }
 
     const logDiv = document.getElementById('create-log');
     const logPre = logDiv.querySelector('pre');
     logDiv.style.display = 'block';
-    logPre.textContent = 'Verbinde...\n';
+    logPre.textContent = 'Connecting...\n';
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${location.host}/ws/instance/create`);
@@ -128,35 +128,35 @@ function createInstance() {
             logPre.textContent += data.message + '\n';
             logDiv.scrollTop = logDiv.scrollHeight;
         } else if (data.type === 'status' && data.status === 'done') {
-            logPre.textContent += '\n✓ Instanz erstellt!\n';
-            showToast('Instanz erstellt');
+            logPre.textContent += '\n✓ Instance created!\n';
+            showToast('Instance created');
             setTimeout(() => location.reload(), 2000);
         } else if (data.type === 'error') {
             logPre.textContent += `ERROR: ${data.message}\n`;
-            showToast('Fehler', 'error');
+            showToast('Error', 'error');
         }
     };
 }
 
 async function restartInstance(name) {
-    if (!confirm(`${name} neustarten?`)) return;
+    if (!confirm(`Restart ${name}?`)) return;
     const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
-    resp.ok ? showToast('Neugestartet') : showToast('Fehler', 'error');
+    resp.ok ? showToast('Restarted') : showToast('Error', 'error');
     setTimeout(() => location.reload(), 2000);
 }
 
 async function stopInstance(name) {
-    if (!confirm(`${name} stoppen?`)) return;
+    if (!confirm(`Stop ${name}?`)) return;
     await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
-    showToast('Gestoppt');
+    showToast('Stopped');
     setTimeout(() => location.reload(), 1000);
 }
 
 async function deleteInstance(name) {
-    if (!confirm(`${name} wirklich LÖSCHEN? (inkl. Datenbank)`)) return;
-    if (!confirm(`Sicher? Das kann nicht rückgängig gemacht werden!`)) return;
+    if (!confirm(`Permanently DELETE ${name}? (including database)`)) return;
+    if (!confirm(`Are you sure? This cannot be undone.`)) return;
     const resp = await fetch(`/api/instances/${name}`, {method: 'DELETE'});
-    resp.ok ? showToast('Gelöscht') : showToast('Fehler', 'error');
+    resp.ok ? showToast('Deleted') : showToast('Error', 'error');
     setTimeout(() => location.reload(), 1000);
 }
 </script>

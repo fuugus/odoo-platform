@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,13 +21,13 @@
                 <span class="icon icon-chart"></span> <span>Dashboard</span>
             </a></li>
             <li><a href="/instances" class="{% if request.url.path == '/instances' %}active{% endif %}">
-                <span class="icon icon-server"></span> <span>Instanzen</span>
+                <span class="icon icon-server"></span> <span>Instances</span>
             </a></li>
             <li><a href="/deploy" class="{% if request.url.path == '/deploy' %}active{% endif %}">
                 <span class="icon icon-deploy"></span> <span>Deploy</span>
             </a></li>
             <li><a href="/databases" class="{% if request.url.path == '/databases' %}active{% endif %}">
-                <span class="icon icon-database"></span> <span>Datenbanken</span>
+                <span class="icon icon-database"></span> <span>Databases</span>
             </a></li>
         </ul>
         <div class="sidebar-footer">

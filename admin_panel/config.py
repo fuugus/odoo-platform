@@ -15,10 +15,10 @@ DEFAULT_CONFIG = {
     "odoo_version": "19.0",
     "pg_version": "16",
     "setup_steps": {
-        "system_update": {"status": "pending", "label": "System Update & Pakete", "description": "Installs build tools, Python dev headers, and image libraries."},
+        "system_update": {"status": "pending", "label": "System Update & Packages", "description": "Installs build tools, Python dev headers, and image libraries."},
         "postgresql": {"status": "pending", "label": "PostgreSQL 16", "description": "Adds the official PostgreSQL repo and installs v16."},
         "wkhtmltopdf": {"status": "pending", "label": "wkhtmltopdf", "description": "Patched Qt build required by Odoo for PDF reports."},
-        "odoo_source": {"status": "pending", "label": "Odoo 19 Enterprise Source-Install", "description": "Clones Community + Enterprise repos. Requires GitHub token above."},
+        "odoo_source": {"status": "pending", "label": "Odoo 19 Enterprise Source Install", "description": "Clones Community + Enterprise repos. Requires GitHub token above."},
         "nginx": {"status": "pending", "label": "Nginx Reverse Proxy", "description": "Routes subdomains to Odoo instances by port."},
         "mailpit": {"status": "pending", "label": "Mailpit", "description": "Local SMTP catch-all for dev/staging emails."},
         "dns_check": {"status": "pending", "label": "DNS Check", "description": "Verify that *.domain resolves to this server's IP."},

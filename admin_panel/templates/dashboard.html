@@ -4,17 +4,17 @@
 {% block content %}
 <div class="page-header">
     <h1>Dashboard</h1>
-    <p>Übersicht aller Odoo-Instanzen und Services</p>
+    <p>Overview of all Odoo instances and services</p>
 </div>
 
 <div class="stats-grid">
     <div class="stat-card card">
         <div class="stat-value">{{ instances | length }}</div>
-        <div class="stat-label">Instanzen</div>
+        <div class="stat-label">Instances</div>
     </div>
     <div class="stat-card card">
         <div class="stat-value">{{ instances.values() | selectattr('status', 'equalto', 'active') | list | length }}</div>
-        <div class="stat-label">Aktiv</div>
+        <div class="stat-label">Active</div>
     </div>
     <div class="stat-card card">
         <div class="stat-value" id="cpu-usage">–</div>
@@ -63,30 +63,28 @@
 {% block scripts %}
 <script>
 async function restartInstance(name) {
-    if (!confirm(`Instanz ${name} neustarten?`)) return;
+    if (!confirm(`Restart instance ${name}?`)) return;
     const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
     if (resp.ok) {
-        showToast(`${name} wird neugestartet...`);
+        showToast(`${name} is restarting...`);
         setTimeout(() => location.reload(), 3000);
     } else {
-        showToast('Fehler beim Neustarten', 'error');
+        showToast('Failed to restart', 'error');
     }
 }
 
 async function stopInstance(name) {
-    if (!confirm(`Instanz ${name} stoppen?`)) return;
+    if (!confirm(`Stop instance ${name}?`)) return;
     const resp = await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
     if (resp.ok) {
-        showToast(`${name} gestoppt`);
+        showToast(`${name} stopped`);
         setTimeout(() => location.reload(), 1000);
     }
 }
 
-// Update system stats
 async function updateStats() {
     try {
         const resp = await fetch('/api/health');
-        // For now just show placeholder - could add psutil endpoint
     } catch(e) {}
 }
 updateStats();

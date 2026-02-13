@@ -38,18 +38,17 @@ function autoScrollLog(element) {
 document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key === 'k') {
         e.preventDefault();
-        // Simple quick nav
         const pages = [
             { name: 'Setup Wizard', url: '/setup' },
             { name: 'Dashboard', url: '/dashboard' },
-            { name: 'Instanzen', url: '/instances' },
+            { name: 'Instances', url: '/instances' },
             { name: 'Deploy', url: '/deploy' },
-            { name: 'Datenbanken', url: '/databases' },
+            { name: 'Databases', url: '/databases' },
         ];
         const choice = prompt(
             'Navigation:\n' +
             pages.map((p, i) => `${i + 1}. ${p.name}`).join('\n') +
-            '\n\nNummer eingeben:'
+            '\n\nEnter number:'
         );
         const idx = parseInt(choice) - 1;
         if (idx >= 0 && idx < pages.length) {
