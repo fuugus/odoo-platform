@@ -122,31 +122,21 @@ function createInstance() {
     if (env === 'dev' && (!devName || !nameRe.test(devName))) { showToast('Developer: lowercase letters and hyphens only', 'error'); return; }
 
     const logDiv = document.getElementById('create-log');
-    const logPre = logDiv.querySelector('pre');
-    logDiv.style.display = 'block';
-    logPre.textContent = 'Connecting...\n';
-
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${location.host}/ws/instance/create`);
-
-    ws.onopen = () => {
-        ws.send(JSON.stringify({client, env, dev_name: devName}));
-    };
-
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'log') {
-            logPre.textContent += data.message + '\n';
-            logDiv.scrollTop = logDiv.scrollHeight;
-        } else if (data.type === 'status' && data.status === 'done') {
-            logPre.textContent += '\n✓ Instance created!\n';
-            showToast('Instance created');
-            setTimeout(() => location.reload(), 1500);
-        } else if (data.type === 'error') {
-            logPre.textContent += `ERROR: ${data.message}\n`;
+    connectWebSocket('/ws/instance/create', logDiv, {
+        onOpen(ws) {
+            ws.send(JSON.stringify({client, env, dev_name: devName}));
+        },
+        onStatus(status) {
+            if (status === 'done') {
+                logDiv.querySelector('pre').textContent += '\n✓ Instance created!\n';
+                showToast('Instance created');
+                setTimeout(() => location.reload(), 1500);
+            }
+        },
+        onError() {
             showToast('Error', 'error');
         }
-    };
+    });
 }
 
 function syncInstance(name) {
@@ -154,38 +144,43 @@ function syncInstance(name) {
     if (!confirm('This cannot be undone. Are you sure?')) return;
 
     const logDiv = document.getElementById('sync-log');
-    const logPre = logDiv.querySelector('pre');
-    logDiv.style.display = 'block';
-    logPre.textContent = 'Connecting...\n';
-
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${location.host}/ws/instance/sync/${name}`);
-
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'log') {
-            logPre.textContent += data.message + '\n';
-            logDiv.scrollTop = logDiv.scrollHeight;
-        } else if (data.type === 'status' && data.status === 'done') {
-            logPre.textContent += '\n✓ Sync complete!\n';
-            showToast('Instance synced from prod');
-        } else if (data.type === 'error') {
-            logPre.textContent += `ERROR: ${data.message}\n`;
+    connectWebSocket(`/ws/instance/sync/${name}`, logDiv, {
+        onStatus(status) {
+            if (status === 'done') {
+                logDiv.querySelector('pre').textContent += '\n✓ Sync complete!\n';
+                showToast('Instance synced from prod');
+            }
+        },
+        onError() {
             showToast('Sync failed', 'error');
         }
-    };
+    });
 }
 
 async function restartInstance(name) {
     if (!confirm(`Restart ${name}?`)) return;
-    const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
-    resp.ok ? showToast('Restarting...') : showToast('Error', 'error');
+    StatusPoller.setPending(name, 'restarting');
+    updateStatusUI(name, 'restarting');
+    try {
+        const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
+        if (!resp.ok) showToast('Restart failed', 'error');
+    } catch (e) {
+        showToast('Restart failed', 'error');
+    }
+    StatusPoller.pollNow();
 }
 
 async function stopInstance(name) {
     if (!confirm(`Stop ${name}?`)) return;
-    await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
-    showToast('Stopping...');
+    StatusPoller.setPending(name, 'stopping');
+    updateStatusUI(name, 'stopping');
+    try {
+        const resp = await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
+        if (!resp.ok) showToast('Stop failed', 'error');
+    } catch (e) {
+        showToast('Stop failed', 'error');
+    }
+    StatusPoller.pollNow();
 }
 
 async function deleteInstance(name) {
@@ -219,30 +214,28 @@ function copyText(el) {
     showToast('Copied');
 }
 
-async function pollStatus() {
-    try {
-        const resp = await fetch('/api/instances');
-        if (!resp.ok) return;
-        const data = await resp.json();
-        for (const [name, inst] of Object.entries(data)) {
-            const cell = document.getElementById('status-' + name);
-            if (!cell) continue;
-            const dot = cell.querySelector('.status-dot');
-            const link = cell.querySelector('a');
-            if (dot) {
-                dot.className = 'status-dot ' + (inst.status === 'active' ? 'status-active' : 'status-inactive');
-            }
-            if (link) {
-                link.lastChild.textContent = inst.status;
-            }
-            const input = document.getElementById('workers-' + name);
-            if (input && !inst.restart_needed) {
-                input.classList.remove('pending');
-            }
-        }
-    } catch {}
+function updateStatusUI(name, status) {
+    const cell = document.getElementById('status-' + name);
+    if (!cell) return;
+    const dot = cell.querySelector('.status-dot');
+    const link = cell.querySelector('a');
+    if (dot) dot.className = 'status-dot status-' + status;
+    if (link) link.lastChild.textContent = ' ' + status;
 }
 
-setInterval(pollStatus, 2000);
+StatusPoller.init(function(data, pending) {
+    for (const [name, inst] of Object.entries(data)) {
+        const p = pending[name];
+        if (p) {
+            updateStatusUI(name, p.state);
+        } else {
+            updateStatusUI(name, inst.status === 'active' ? 'active' : 'inactive');
+        }
+        const input = document.getElementById('workers-' + name);
+        if (input && !inst.restart_needed) {
+            input.classList.remove('pending');
+        }
+    }
+});
 </script>
 {% endblock %}

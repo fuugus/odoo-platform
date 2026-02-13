@@ -435,6 +435,21 @@ input:focus, select:focus {
 .status-active { background: var(--success); }
 .status-inactive { background: var(--error); }
 
+.status-restarting {
+    background: var(--warning);
+    animation: statusPulse 0.8s ease-in-out infinite;
+}
+
+.status-stopping {
+    background: var(--danger);
+    animation: statusPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
 /* ─── Setup Steps ────────────────────────────────────────────────────────── */
 
 .setup-steps {

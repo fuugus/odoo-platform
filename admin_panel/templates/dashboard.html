@@ -62,26 +62,6 @@
 
 {% block scripts %}
 <script>
-async function restartInstance(name) {
-    if (!confirm(`Restart instance ${name}?`)) return;
-    const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
-    if (resp.ok) {
-        showToast(`${name} is restarting...`);
-        setTimeout(() => location.reload(), 3000);
-    } else {
-        showToast('Failed to restart', 'error');
-    }
-}
-
-async function stopInstance(name) {
-    if (!confirm(`Stop instance ${name}?`)) return;
-    const resp = await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
-    if (resp.ok) {
-        showToast(`${name} stopped`);
-        setTimeout(() => location.reload(), 1000);
-    }
-}
-
 async function updateStats() {
     try {
         const resp = await fetch('/api/health');

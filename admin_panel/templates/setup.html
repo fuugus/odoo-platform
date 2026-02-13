@@ -101,7 +101,6 @@ function runStep(stepId) {
     const card = document.getElementById(`step-${stepId}`);
     const btn = card.querySelector('button');
     const logDiv = document.getElementById(`log-${stepId}`);
-    const logPre = logDiv.querySelector('pre');
     const statusIcon = card.querySelector('.step-status-icon');
     const desc = card.querySelector('.step-description');
     const defaultDesc = desc.dataset.default;
@@ -110,20 +109,10 @@ function runStep(stepId) {
     btn.textContent = 'Running...';
     statusIcon.innerHTML = '<span class="icon icon-clock"></span>';
     desc.innerHTML = defaultDesc;
-    logDiv.style.display = 'block';
-    logPre.textContent = '';
 
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${location.host}/ws/setup/${stepId}`);
-    let lastError = '';
-
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'log') {
-            logPre.textContent += data.message + '\n';
-            logDiv.scrollTop = logDiv.scrollHeight;
-        } else if (data.type === 'status') {
-            if (data.status === 'done') {
+    connectWebSocket(`/ws/setup/${stepId}`, logDiv, {
+        onStatus(status, ws, lastError) {
+            if (status === 'done') {
                 statusIcon.innerHTML = '<span class="icon icon-check"></span>';
                 btn.textContent = 'Run Again';
                 btn.disabled = false;
@@ -131,33 +120,27 @@ function runStep(stepId) {
                 card.classList.remove('step-locked');
                 desc.innerHTML = defaultDesc;
                 unlockNextStep(card);
-            } else if (data.status === 'error') {
+            } else if (status === 'error') {
                 statusIcon.innerHTML = '<span class="icon icon-x"></span>';
                 btn.textContent = 'Retry';
                 btn.disabled = false;
                 card.dataset.status = 'error';
                 desc.innerHTML = `<span class="error">${lastError}</span>`;
             }
-        } else if (data.type === 'error') {
-            lastError = data.message;
-            logPre.textContent += `ERROR: ${data.message}\n`;
-        }
-    };
-
-    ws.onerror = () => {
-        statusIcon.innerHTML = '<span class="icon icon-x"></span>';
-        btn.textContent = 'Retry';
-        btn.disabled = false;
-        logPre.textContent += 'WebSocket connection error\n';
-        desc.innerHTML = '<span class="error">WebSocket connection error</span>';
-    };
-
-    ws.onclose = () => {
-        if (btn.textContent === 'Running...') {
-            btn.textContent = 'Run';
+        },
+        onWsError() {
+            statusIcon.innerHTML = '<span class="icon icon-x"></span>';
+            btn.textContent = 'Retry';
             btn.disabled = false;
+            desc.innerHTML = '<span class="error">WebSocket connection error</span>';
+        },
+        onClose() {
+            if (btn.textContent === 'Running...') {
+                btn.textContent = 'Run';
+                btn.disabled = false;
+            }
         }
-    };
+    });
 }
 </script>
 {% endblock %}
