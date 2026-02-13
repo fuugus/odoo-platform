@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from config import load_config, save_config, PLATFORM_DIR
-from setup_steps import SETUP_STEPS, STEP_ORDER, create_odoo_instance, delete_odoo_instance, run_cmd
+from setup_steps import SETUP_STEPS, STEP_ORDER, create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd
 
 _public_ip_cache = None
 
@@ -69,12 +69,16 @@ def is_setup_complete() -> bool:
     )
 
 
-def get_next_dev_port() -> int:
-    """Get the next available dev port (starting from 8071)."""
+RESERVED_PORTS = {8025, 8080, 1025}
+
+
+def get_next_port() -> int:
+    """Get the next available port starting from 8069."""
     config = load_config()
-    used_ports = [inst["port"] for inst in config["instances"].values()]
-    port = 8071
-    while port in used_ports:
+    used = set(inst["port"] for inst in config["instances"].values())
+    used.update(RESERVED_PORTS)
+    port = 8069
+    while port in used:
         port += 1
     return port
 
@@ -148,7 +152,6 @@ async def instances_page(request: Request):
         "request": request,
         "config": config,
         "instances": instances,
-        "next_port": get_next_dev_port(),
     })
 
 
@@ -216,7 +219,7 @@ async def api_create_instance(request: Request):
     client = data.get("client")
     env = data.get("env", "dev")
     dev_name = data.get("dev_name", "")
-    port = data.get("port", get_next_dev_port())
+    port = data.get("port", get_next_port())
 
     if not client:
         raise HTTPException(status_code=400, detail="client is required")
@@ -379,7 +382,7 @@ async def ws_create_instance(websocket: WebSocket):
         client = data.get("client")
         env = data.get("env", "dev")
         dev_name = data.get("dev_name", "")
-        port = data.get("port", get_next_dev_port())
+        port = data.get("port", get_next_port())
 
         if env == "dev" and dev_name:
             actual_env = f"dev_{dev_name}"
@@ -394,6 +397,24 @@ async def ws_create_instance(websocket: WebSocket):
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})
+    finally:
+        await websocket.close()
+
+
+@app.websocket("/ws/instance/sync/{instance_name}")
+async def ws_sync_instance(websocket: WebSocket, instance_name: str):
+    """WebSocket endpoint for syncing an instance from prod with live output."""
+    await websocket.accept()
+    try:
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await sync_instance_from_prod(instance_name, ws_send)
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
     finally:
         await websocket.close()
 

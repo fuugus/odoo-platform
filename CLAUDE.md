@@ -53,7 +53,7 @@ No test suite or linter is configured.
 - Data dir: `/opt/odoo/data/{instance_name}`
 
 **Port allocation:**
-- 8069 → prod, 8070 → staging, 8071+ → dev instances
+- 8069+ → Odoo instances (dynamically allocated, all environments)
 - 8080 → admin panel, 8025 → Mailpit UI, 1025 → Mailpit SMTP
 
 **Key patterns:**
@@ -70,4 +70,6 @@ No test suite or linter is configured.
 - **No change-log comments in code.** Don't add comments like `# changed X to Y` or `# added by Claude`. Only add comments where we discussed important functionality worth remembering.
 - **Modern, flat UI design.** All UI work must use a clean, professional, flat design. No rounded cartoon elements, no playful colors, no childish aesthetics. Think SaaS admin panels — minimal, sharp, confident.
 - **No Co-Authored-By in commits.** Do not append `Co-Authored-By` trailers to commit messages.
+- **Commit message format.** First line is a short summary. Follow with a blank line, then bullet points (no dashes or asterisks — just plain lines) describing each meaningful change.
 - **English only.** All code, comments, UI text, and documentation must be in professional English. No German or other languages.
+- **Restart services after code changes.** After editing backend files, run `systemctl restart odoo-admin-panel` (and any affected Odoo instance services) so changes take effect. The production service does not auto-reload.

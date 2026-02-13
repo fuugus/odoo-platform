@@ -26,10 +26,6 @@
             <label for="new-dev-name">Developer:</label>
             <input type="text" id="new-dev-name" placeholder="samuel">
         </div>
-        <div class="form-row">
-            <label for="new-port">Port:</label>
-            <input type="number" id="new-port" value="{{ next_port }}">
-        </div>
     </div>
     <button class="btn btn-primary" onclick="createInstance()">Create Instance</button>
     <div id="create-log" class="step-log" style="display:none;">
@@ -40,34 +36,37 @@
 <div class="card">
     <h3>Active Instances</h3>
     {% if instances %}
-    <table class="data-table">
+    <table class="data-table instance-table">
         <thead>
             <tr>
-                <th>Name</th>
                 <th>Client</th>
                 <th>Env</th>
                 <th>Port</th>
-                <th>DB</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for name, inst in instances.items() %}
+            {% set env_prefix = inst.env | replace("_", "-") %}
+            {% set fqdn = inst.client ~ "-" ~ env_prefix ~ "." ~ config.domain %}
             <tr id="row-{{ name }}">
-                <td><strong>{{ name }}</strong></td>
-                <td>{{ inst.client }}</td>
-                <td><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></td>
-                <td>{{ inst.port }}</td>
-                <td><code>{{ inst.db_name }}</code></td>
+                <td><a href="https://{{ fqdn }}" target="_blank">{{ inst.client }}</a></td>
+                <td><a href="https://{{ fqdn }}" target="_blank"><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></a></td>
+                <td><a href="https://{{ fqdn }}" target="_blank">{{ inst.port }}</a></td>
                 <td>
-                    <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
-                    {{ inst.status }}
+                    <a href="https://{{ fqdn }}" target="_blank">
+                        <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
+                        {{ inst.status }}
+                    </a>
                 </td>
                 <td class="actions">
-                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')"><span class="icon icon-refresh"></span></button>
-                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')"><span class="icon icon-stop"></span></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')"><span class="icon icon-trash"></span></button>
+                    {% if inst.env != 'prod' %}
+                    <button class="btn btn-sm btn-secondary" onclick="syncInstance('{{ name }}')" title="Sync from Prod"><span class="icon icon-clone"></span></button>
+                    {% endif %}
+                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')" title="Restart"><span class="icon icon-refresh"></span></button>
+                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')" title="Stop"><span class="icon icon-stop"></span></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')" title="Delete"><span class="icon icon-trash"></span></button>
                 </td>
             </tr>
             {% endfor %}
@@ -76,19 +75,25 @@
     {% else %}
     <p class="empty-state">No instances created yet.</p>
     {% endif %}
+    <div id="sync-log" class="step-log" style="display:none;">
+        <pre></pre>
+    </div>
 </div>
 
 <div class="card">
-    <h3>Port Schema</h3>
-    <table class="data-table">
-        <thead><tr><th>Port</th><th>Instance</th></tr></thead>
+    <h3>Port Allocation</h3>
+    <table class="data-table port-table">
+        <thead><tr><th>Port</th><th>Service</th></tr></thead>
         <tbody>
-            <tr><td>8080</td><td>Admin Panel (this UI)</td></tr>
-            <tr><td>8069</td><td>Odoo Production</td></tr>
-            <tr><td>8070</td><td>Odoo Staging</td></tr>
-            <tr><td>8071+</td><td>Odoo Dev (per developer)</td></tr>
-            <tr><td>8025</td><td>Mailpit Web UI</td></tr>
             <tr><td>1025</td><td>Mailpit SMTP</td></tr>
+            <tr><td>8025</td><td>Mailpit Web UI</td></tr>
+            <tr><td>8080</td><td>Admin Panel</td></tr>
+            {% if instances %}
+            {% set ports = instances.values() | map(attribute='port') | list | sort %}
+            <tr><td>{{ ports | first }}–{{ ports | last }}</td><td>Odoo Instances ({{ instances | length }})</td></tr>
+            {% else %}
+            <tr><td>8069+</td><td>Odoo Instances</td></tr>
+            {% endif %}
         </tbody>
     </table>
 </div>
@@ -105,7 +110,6 @@ function createInstance() {
     const client = document.getElementById('new-client').value;
     const env = document.getElementById('new-env').value;
     const devName = document.getElementById('new-dev-name').value;
-    const port = parseInt(document.getElementById('new-port').value);
 
     if (!client) { showToast('Client name required', 'error'); return; }
     if (env === 'dev' && !devName) { showToast('Developer name required', 'error'); return; }
@@ -119,7 +123,7 @@ function createInstance() {
     const ws = new WebSocket(`${protocol}//${location.host}/ws/instance/create`);
 
     ws.onopen = () => {
-        ws.send(JSON.stringify({client, env, dev_name: devName, port}));
+        ws.send(JSON.stringify({client, env, dev_name: devName}));
     };
 
     ws.onmessage = (event) => {
@@ -134,6 +138,34 @@ function createInstance() {
         } else if (data.type === 'error') {
             logPre.textContent += `ERROR: ${data.message}\n`;
             showToast('Error', 'error');
+        }
+    };
+}
+
+function syncInstance(name) {
+    if (!confirm(`Sync ${name} from production? This will REPLACE the current database and filestore.`)) return;
+    if (!confirm('This cannot be undone. Are you sure?')) return;
+
+    const logDiv = document.getElementById('sync-log');
+    const logPre = logDiv.querySelector('pre');
+    logDiv.style.display = 'block';
+    logPre.textContent = 'Connecting...\n';
+
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${location.host}/ws/instance/sync/${name}`);
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'log') {
+            logPre.textContent += data.message + '\n';
+            logDiv.scrollTop = logDiv.scrollHeight;
+        } else if (data.type === 'status' && data.status === 'done') {
+            logPre.textContent += '\n✓ Sync complete!\n';
+            showToast('Instance synced from prod');
+            setTimeout(() => location.reload(), 2000);
+        } else if (data.type === 'error') {
+            logPre.textContent += `ERROR: ${data.message}\n`;
+            showToast('Sync failed', 'error');
         }
     };
 }

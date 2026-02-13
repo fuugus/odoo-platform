@@ -210,29 +210,16 @@ async def step_odoo_source(ws_send=None):
 # ─── Step 5: Nginx Reverse Proxy ───────────────────────────────────────────
 
 async def step_nginx(ws_send=None):
-    """Install Nginx and configure wildcard reverse proxy."""
+    """Install Nginx and configure reverse proxy with per-instance config files."""
     update_step_status("nginx", "running")
     try:
         await run_cmd("apt-get install -y nginx certbot python3-certbot-nginx", ws_send)
 
-        # Domain-agnostic Nginx config: routing is based on subdomain prefix
-        # patterns only (client-prod., client-staging., admin.), so the actual
-        # domain can be changed at any time without regenerating this config.
-        nginx_conf = """
-# Odoo Platform - Wildcard Reverse Proxy
-# Routes by subdomain prefix, independent of the base domain.
-# client-prod.*    -> 8069
-# client-staging.* -> 8070
-# client-dev-*.*   -> 8071
-# admin.*          -> 8080 (admin panel)
-# mailpit.*        -> 8025 (mail catch-all UI)
+        # Main config: admin, mailpit, default server + include for instance configs
+        nginx_conf = """# Odoo Platform - Reverse Proxy
+# Per-instance configs are in /etc/nginx/odoo-instances/*.conf
 
-map $host $odoo_port {
-    ~^[^-]+-prod\\.    8069;
-    ~^[^-]+-staging\\. 8070;
-    ~^[^-]+-dev-       8071;
-    default            0;
-}
+include /etc/nginx/odoo-instances/*.conf;
 
 # Admin Panel
 server {
@@ -268,36 +255,6 @@ server {
     }
 }
 
-# Odoo instances (only matched subdomains)
-server {
-    listen 80;
-    server_name ~^[^-]+-(?:prod|staging|dev-)\\S+\\.;
-
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-
-    location /longpolling {
-        proxy_pass http://127.0.0.1:8072;
-    }
-
-    location /websocket {
-        proxy_pass http://127.0.0.1:$odoo_port;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:$odoo_port;
-        proxy_read_timeout 720s;
-        proxy_connect_timeout 720s;
-        proxy_send_timeout 720s;
-        client_max_body_size 200m;
-    }
-}
-
 # Default: bare IP or unknown subdomain
 server {
     listen 80 default_server;
@@ -309,15 +266,23 @@ server {
     }
 }
 """
+        # Create instance config directory
+        await run_cmd(f"mkdir -p {NGINX_INSTANCE_DIR}", ws_send)
+
+        # Write main config
         conf_path = "/etc/nginx/sites-available/odoo-platform"
-        if not Path(conf_path).exists():
-            with open(conf_path, "w") as f:
-                f.write(nginx_conf)
-            if ws_send:
-                await ws_send("Nginx config written")
-        else:
-            if ws_send:
-                await ws_send("Nginx config already exists, keeping it (certbot may have modified it)")
+        with open(conf_path, "w") as f:
+            f.write(nginx_conf)
+        if ws_send:
+            await ws_send("Nginx main config written")
+
+        # Write per-instance configs for any existing instances
+        config = load_config()
+        domain = config.get("domain", "")
+        for name, inst in config.get("instances", {}).items():
+            await write_instance_nginx_conf(
+                name, inst["client"], inst["env"], inst["port"], domain, ws_send
+            )
 
         # Enable site
         await run_cmd(
@@ -449,7 +414,7 @@ async def step_dns_check(ws_send=None):
 # ─── Step 8: SSL Certificates ─────────────────────────────────────────────
 
 async def step_ssl_certs(ws_send=None):
-    """Issue Let's Encrypt SSL certificates for admin and mailpit subdomains."""
+    """Issue Let's Encrypt SSL certificates for admin, mailpit, and all instances."""
     update_step_status("ssl_certs", "running")
     try:
         config = load_config()
@@ -459,9 +424,14 @@ async def step_ssl_certs(ws_send=None):
 
         await run_cmd("apt-get install -y certbot python3-certbot-nginx", ws_send)
 
+        # Collect all FQDNs: admin, mailpit, plus all instance subdomains
+        fqdns = [f"admin.{domain}", f"mailpit.{domain}"]
+        for name, inst in config.get("instances", {}).items():
+            env_prefix = inst["env"].replace("_", "-")
+            fqdns.append(f"{inst['client']}-{env_prefix}.{domain}")
+
         errors = []
-        for sub in ["admin", "mailpit"]:
-            fqdn = f"{sub}.{domain}"
+        for fqdn in fqdns:
             if ws_send:
                 await ws_send(f"Requesting certificate for {fqdn}...")
             try:
@@ -491,23 +461,73 @@ async def step_ssl_certs(ws_send=None):
         raise
 
 
+# ─── Nginx Per-Instance Config ─────────────────────────────────────────────
+
+NGINX_INSTANCE_DIR = "/etc/nginx/odoo-instances"
+
+
+def _instance_nginx_conf(instance_name: str, client: str, env: str, port: int, domain: str) -> str:
+    """Build a single Nginx server block for an Odoo instance."""
+    env_prefix = env.replace("_", "-")
+    fqdn = f"{client}-{env_prefix}.{domain}"
+    return f"""# {instance_name}
+server {{
+    listen 80;
+    server_name {fqdn};
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location /websocket {{
+        proxy_pass http://127.0.0.1:{port};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }}
+
+    location / {{
+        proxy_pass http://127.0.0.1:{port};
+        proxy_read_timeout 720s;
+        proxy_connect_timeout 720s;
+        proxy_send_timeout 720s;
+        client_max_body_size 200m;
+    }}
+}}
+"""
+
+
+async def write_instance_nginx_conf(instance_name: str, client: str, env: str, port: int, domain: str, ws_send=None):
+    """Write a per-instance Nginx config file."""
+    await run_cmd(f"mkdir -p {NGINX_INSTANCE_DIR}", ws_send)
+    conf_path = f"{NGINX_INSTANCE_DIR}/{instance_name}.conf"
+    content = _instance_nginx_conf(instance_name, client, env, port, domain)
+    with open(conf_path, "w") as f:
+        f.write(content)
+    if ws_send:
+        await ws_send(f"Nginx config written: {conf_path}")
+
+
+async def remove_instance_nginx_conf(instance_name: str, ws_send=None):
+    """Remove a per-instance Nginx config file."""
+    conf_path = f"{NGINX_INSTANCE_DIR}/{instance_name}.conf"
+    if Path(conf_path).exists():
+        Path(conf_path).unlink()
+        if ws_send:
+            await ws_send(f"Nginx config removed: {conf_path}")
+
+
+async def reload_nginx(ws_send=None):
+    """Test and reload Nginx configuration."""
+    await run_cmd("nginx -t", ws_send)
+    await run_cmd("systemctl reload nginx", ws_send)
+
+
 # ─── Instance Management ────────────────────────────────────────────────────
 
-ENV_PORTS = {"prod": 8069, "staging": 8070}
-
-
-def port_for_env(env: str, explicit_port: int | None = None) -> int:
-    """Return the port for an environment, matching Nginx routing conventions."""
-    if explicit_port is not None:
-        return explicit_port
-    if env in ENV_PORTS:
-        return ENV_PORTS[env]
-    return 8071  # all dev-* environments
-
-
-async def create_odoo_instance(client: str, env: str, port: int | None = None, ws_send=None):
+async def create_odoo_instance(client: str, env: str, port: int, ws_send=None):
     """Create a new Odoo instance with its own systemd service and config."""
-    port = port_for_env(env, port)
     instance_name = f"{client}_{env}"
     db_name = instance_name
     conf_dir = "/etc/odoo"
@@ -580,6 +600,25 @@ WantedBy=multi-user.target
         ws_send,
     )
 
+    # Initialize Odoo if database is empty (no ir_module_module table)
+    _, check_out = await run_cmd(
+        f"su - postgres -c \"psql -d {db_name} -tc \\\"SELECT 1 FROM information_schema.tables "
+        f"WHERE table_name='ir_module_module'\\\"\"",
+        ws_send,
+    )
+    if "1" not in check_out:
+        if ws_send:
+            await ws_send("Initializing Odoo database (this may take a minute)...")
+        await run_cmd(
+            f'su - odoo -s /bin/bash -c "'
+            f'/opt/odoo/venv/bin/python3 /opt/odoo/odoo/odoo-bin '
+            f'-c {conf_path} -i base --stop-after-init"',
+            ws_send,
+        )
+    else:
+        if ws_send:
+            await ws_send("Database already initialized, skipping")
+
     # Enable and start
     await run_cmd("systemctl daemon-reload", ws_send)
     await run_cmd(f"systemctl enable odoo-{instance_name}", ws_send)
@@ -597,9 +636,12 @@ WantedBy=multi-user.target
     }
     save_config(config)
 
-    # SSL cert for the instance subdomain
+    # Nginx per-instance config + SSL
     domain = config.get("domain", "")
     if domain:
+        await write_instance_nginx_conf(instance_name, client, env, port, domain, ws_send)
+        await reload_nginx(ws_send)
+
         env_prefix = env.replace("_", "-")
         fqdn = f"{client}-{env_prefix}.{domain}"
         try:
@@ -638,11 +680,105 @@ async def delete_odoo_instance(instance_name: str, ws_send=None):
         ws_send,
     )
 
+    # Clean up data directory
+    data_dir = f"/opt/odoo/data/{instance_name}"
+    await run_cmd(f"rm -rf {data_dir}", ws_send)
+
+    # Remove Nginx config
+    await remove_instance_nginx_conf(instance_name, ws_send)
+    await reload_nginx(ws_send)
+
     del config["instances"][instance_name]
     save_config(config)
 
     if ws_send:
         await ws_send(f"Instance {instance_name} deleted")
+
+
+async def sync_instance_from_prod(instance_name: str, ws_send=None):
+    """Sync a staging/dev instance from its client's prod database and filestore."""
+    config = load_config()
+    target = config["instances"].get(instance_name)
+    if not target:
+        raise ValueError(f"Instance {instance_name} not found")
+
+    if target["env"] == "prod":
+        raise ValueError("Cannot sync a prod instance from itself")
+
+    client = target["client"]
+    prod_name = f"{client}_prod"
+    prod = config["instances"].get(prod_name)
+    if not prod:
+        raise ValueError(f"No prod instance found for client {client}")
+
+    target_db = target["db_name"]
+    target_service = target["service"]
+    target_conf = target["conf"]
+    prod_db = prod["db_name"]
+    target_data_dir = f"/opt/odoo/data/{instance_name}"
+    prod_data_dir = f"/opt/odoo/data/{prod_name}"
+
+    # Stop target instance
+    if ws_send:
+        await ws_send(f"Stopping {target_service}...")
+    await run_cmd(f"systemctl stop {target_service}", ws_send)
+
+    # Drop target database
+    if ws_send:
+        await ws_send(f"Dropping database {target_db}...")
+    await run_cmd(
+        f'su - postgres -c "dropdb --if-exists {target_db}"',
+        ws_send,
+    )
+
+    # Terminate active connections to prod DB so createdb -T works
+    if ws_send:
+        await ws_send(f"Preparing to clone {prod_db}...")
+    await run_cmd(
+        f"su - postgres -c \"psql -c \\\"SELECT pg_terminate_backend(pid) "
+        f"FROM pg_stat_activity WHERE datname='{prod_db}' "
+        f"AND pid <> pg_backend_pid()\\\"\"",
+        ws_send,
+    )
+
+    # Clone prod database
+    if ws_send:
+        await ws_send(f"Cloning {prod_db} -> {target_db}...")
+    await run_cmd(
+        f'su - postgres -c "createdb -O odoo -T {prod_db} {target_db}"',
+        ws_send,
+    )
+
+    # Copy filestore
+    prod_filestore = f"{prod_data_dir}/filestore/{prod_db}"
+    target_filestore = f"{target_data_dir}/filestore/{target_db}"
+    if Path(prod_filestore).exists():
+        if ws_send:
+            await ws_send(f"Copying filestore from {prod_name}...")
+        await run_cmd(f"rm -rf {target_filestore}", ws_send)
+        await run_cmd(f"mkdir -p {target_data_dir}/filestore", ws_send)
+        await run_cmd(f"cp -a {prod_filestore} {target_filestore}", ws_send)
+        await run_cmd(f"chown -R odoo:odoo {target_data_dir}", ws_send)
+    else:
+        if ws_send:
+            await ws_send("No filestore to copy (prod filestore not found)")
+
+    # Neutralize the cloned database
+    if ws_send:
+        await ws_send("Running Odoo neutralize...")
+    await run_cmd(
+        f"/opt/odoo/venv/bin/python3 /opt/odoo/odoo/odoo-bin "
+        f"-c {target_conf} --neutralize --stop-after-init",
+        ws_send,
+    )
+
+    # Start target instance
+    if ws_send:
+        await ws_send(f"Starting {target_service}...")
+    await run_cmd(f"systemctl start {target_service}", ws_send)
+
+    if ws_send:
+        await ws_send(f"Sync complete: {instance_name} now mirrors {prod_name}")
 
 
 # Step registry

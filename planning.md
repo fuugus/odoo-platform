@@ -17,9 +17,9 @@ One server, everything on it:
 | Port | Instance |
 |------|----------|
 | 8080 | Admin Panel (FastAPI) |
-| 8069 | Odoo Production |
-| 8070 | Odoo Staging |
-| 8071+ | Odoo Dev (per developer) |
+| 8025 | Mailpit Web UI |
+| 1025 | Mailpit SMTP |
+| 8069+ | Odoo instances (dynamically allocated) |
 
 ## Naming Conventions
 

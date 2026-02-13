@@ -362,6 +362,22 @@ input:focus, select:focus {
     gap: 4px;
 }
 
+.instance-table td a {
+    color: inherit;
+    text-decoration: none;
+    display: block;
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+    width: auto;
+}
+
+.port-table td:first-child,
+.port-table th:first-child {
+    width: 80px;
+}
+
 /* ─── Badges ─────────────────────────────────────────────────────────────── */
 
 .badge {
