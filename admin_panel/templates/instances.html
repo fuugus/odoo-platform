@@ -66,13 +66,15 @@
                         {{ inst.status }}
                     </a>
                 </td>
-                <td class="actions">
+                <td>
+                    <div class="actions">
                     {% if inst.env != 'prod' %}
                     <button class="btn btn-sm btn-secondary" onclick="syncInstance('{{ name }}')" title="Sync from Prod"><span class="icon icon-clone"></span></button>
                     {% endif %}
                     <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')" title="Restart"><span class="icon icon-refresh"></span></button>
                     <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')" title="Stop"><span class="icon icon-stop"></span></button>
                     <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')" title="Delete"><span class="icon icon-trash"></span></button>
+                    </div>
                 </td>
             </tr>
             {% endfor %}
