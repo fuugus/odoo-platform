@@ -40,26 +40,50 @@ No test suite or linter is configured.
 **Entry point:** `admin_panel/main.py` — FastAPI app with routes, API endpoints, and WebSocket handlers.
 
 **Key modules:**
-- `admin_panel/config.py` — Loads/saves `platform.json`, provides `get_config()`/`save_config()`
-- `admin_panel/setup_steps.py` — 8 async setup steps (system_update → postgresql → wkhtmltopdf → odoo_source → nginx → mailpit → dns_check → ssl_certs), each idempotent and streaming progress via WebSocket
+- `admin_panel/config.py` — Loads/saves `platform.json`, provides `load_config()`/`save_config()`/`update_step_status()`
+- `admin_panel/setup_steps.py` — 8 async setup steps (system_update → postgresql → wkhtmltopdf → odoo_source → nginx → mailpit → dns_check → ssl_certs), each idempotent and streaming progress via WebSocket. Also contains `create_odoo_instance()`, `delete_odoo_instance()`, and `sync_instance_from_prod()`.
 - `admin_panel/templates/` — Jinja2 templates (base, setup, dashboard, instances, deploy, databases)
-- `admin_panel/static/` — Single CSS file + single JS file, no build pipeline
+- `admin_panel/static/css/style.css` + `admin_panel/static/js/app.js` — no build pipeline
+
+**Two separate Python virtual environments:**
+- `.venv/` (repo root) — runs the FastAPI admin panel (fastapi, uvicorn, jinja2, websockets)
+- `/opt/odoo/venv/` — runs Odoo instances (odoo requirements.txt)
 
 **Instance naming convention:**
 - Instance/DB name: `{client}_{env}` (e.g., `kaminfeger_prod`)
-- Subdomain: `{client}-{env}.{domain}` (underscores become hyphens)
+- Subdomain: `{client}-{env}.{domain}` (underscores become hyphens in URLs)
 - Systemd service: `odoo-{instance_name}`
 - Config file: `/etc/odoo/{instance_name}.conf`
 - Data dir: `/opt/odoo/data/{instance_name}`
 
+**Odoo filesystem layout (`/opt/odoo/`):**
+- `odoo/` — Community source (git, branch 19.0)
+- `enterprise/` — Enterprise source (git, branch 19.0, requires GitHub token)
+- `custom-addons/` — Custom modules (git pull on deploy)
+- `venv/` — Odoo Python venv
+- `data/{instance_name}/` — per-instance data dir (filestore, sessions)
+
 **Port allocation:**
-- 8069+ → Odoo instances (dynamically allocated, all environments)
+- 8069+ → Odoo instances (each gets two consecutive ports: HTTP and gevent)
 - 8080 → admin panel, 8025 → Mailpit UI, 1025 → Mailpit SMTP
 
+**Nginx config structure:**
+- `/etc/nginx/sites-available/odoo-platform` — main config (admin, mailpit, default server)
+- `/etc/nginx/odoo-instances/{instance_name}.conf` — per-instance server blocks, auto-generated on instance create/delete
+
+**`platform.json` structure:**
+- `domain` — wildcard domain (e.g., `odoo.binaryone.ch`)
+- `github_token` — GitHub PAT for Enterprise repo access
+- `setup_steps` — map of step_id → `{status, label, description, message}`
+- `instances` — map of instance_name → `{client, env, port, workers, master_pw, admin_pw, db_name, service, conf}`
+- `clients` — reserved, currently unused
+
 **Key patterns:**
-- All long-running operations (setup steps, instance creation) stream logs to the browser via WebSocket
-- Shell commands run through `asyncio.create_subprocess_shell` with real-time output capture
+- All long-running operations (setup steps, instance creation, prod sync) stream logs to the browser via WebSocket
+- `run_cmd()` in `setup_steps.py` is the core utility — runs shell commands via `asyncio.create_subprocess_shell` and optionally streams each line to a `ws_send` callback
+- WebSocket messages use JSON with `{type: "log"|"status"|"error", message|status: ...}`
 - Setup steps are ordered and have dependency checks; each can be re-run safely
+- `sync_instance_from_prod()` flow: stop target → drop target DB → terminate prod connections → `createdb -T` clone → copy filestore → `odoo-bin --neutralize` → start target
 
 ## UI Design
 
