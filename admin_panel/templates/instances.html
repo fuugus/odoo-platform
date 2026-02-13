@@ -46,7 +46,7 @@
                 <th>Master PW</th>
                 <th>Admin PW</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th style="text-align: right">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -86,6 +86,7 @@
     </div>
 </div>
 
+{% if instances %}
 <div class="card">
     <h3>Port Allocation</h3>
     <table class="data-table port-table">
@@ -94,15 +95,12 @@
             <tr><td>1025</td><td>Mailpit SMTP</td></tr>
             <tr><td>8025</td><td>Mailpit Web UI</td></tr>
             <tr><td>8080</td><td>Admin Panel</td></tr>
-            {% if instances %}
             {% set ports = instances.values() | map(attribute='port') | list | sort %}
             <tr><td>{{ ports | first }}–{{ ports | last + 1 }}</td><td>Odoo Instances ({{ instances | length }})</td></tr>
-            {% else %}
-            <tr><td>8069+</td><td>Odoo Instances</td></tr>
-            {% endif %}
         </tbody>
     </table>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

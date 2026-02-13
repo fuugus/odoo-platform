@@ -360,6 +360,8 @@ input:focus, select:focus {
 .actions {
     display: flex;
     gap: 4px;
+    justify-content: flex-end;
+    white-space: nowrap;
 }
 
 .instance-table td a {
