@@ -465,6 +465,14 @@ input:focus, select:focus {
     word-break: break-all;
 }
 
+.step-card.step-locked {
+    opacity: 0.45;
+}
+
+.step-card.step-locked button {
+    pointer-events: none;
+}
+
 .step-description {
     margin-top: 8px;
     font-size: 13px;

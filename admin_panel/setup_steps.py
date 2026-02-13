@@ -207,7 +207,7 @@ async def step_odoo_source(ws_send=None):
         raise
 
 
-# ─── Step 5: Nginx + Wildcard SSL ───────────────────────────────────────────
+# ─── Step 5: Nginx Reverse Proxy ───────────────────────────────────────────
 
 async def step_nginx(ws_send=None):
     """Install Nginx and configure wildcard reverse proxy."""
@@ -329,23 +329,6 @@ server {
         await run_cmd("systemctl enable nginx", ws_send)
         await run_cmd("systemctl reload nginx || systemctl start nginx", ws_send)
 
-        # SSL certs for admin and mailpit (skip if DNS not ready)
-        config = load_config()
-        domain = config.get("domain", "")
-        if domain:
-            for sub in ["admin", "mailpit"]:
-                fqdn = f"{sub}.{domain}"
-                try:
-                    await run_cmd(
-                        f"certbot --nginx -d {fqdn} --non-interactive "
-                        f"--agree-tos --register-unsafely-without-email "
-                        f"--keep-until-expiring",
-                        ws_send,
-                    )
-                except Exception:
-                    if ws_send:
-                        await ws_send(f"SSL for {fqdn} skipped (DNS not ready?)")
-
         update_step_status("nginx", "done")
         if ws_send:
             await ws_send("✓ Nginx installed and configured")
@@ -394,6 +377,115 @@ WantedBy=multi-user.target
             await ws_send("✓ Mailpit installed (SMTP :1025, Web UI :8025)")
     except Exception as e:
         update_step_status("mailpit", "error", str(e))
+        if ws_send:
+            await ws_send(f"✗ Error: {e}")
+        raise
+
+
+# ─── Step 7: DNS Check ─────────────────────────────────────────────────────
+
+async def step_dns_check(ws_send=None):
+    """Verify that *.domain resolves to this server's public IP."""
+    update_step_status("dns_check", "running")
+    try:
+        config = load_config()
+        domain = config.get("domain", "")
+        if not domain:
+            raise RuntimeError("No domain configured. Set it in the config above.")
+
+        # Detect public IP
+        public_ip = None
+        for url in ["https://api.ipify.org", "https://icanhazip.com", "https://ifconfig.me"]:
+            try:
+                result = await asyncio.create_subprocess_shell(
+                    f"curl -s --max-time 3 {url}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, _ = await result.communicate()
+                ip = stdout.decode().strip()
+                if ip and not ip.startswith("<"):
+                    public_ip = ip
+                    break
+            except Exception:
+                continue
+        if not public_ip:
+            raise RuntimeError("Could not detect server public IP.")
+
+        if ws_send:
+            await ws_send(f"Server public IP: {public_ip}")
+
+        # Resolve admin.{domain}
+        check_host = f"admin.{domain}"
+        if ws_send:
+            await ws_send(f"Resolving {check_host}...")
+
+        proc = await asyncio.create_subprocess_shell(
+            f"host {check_host}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        stdout, _ = await proc.communicate()
+        output = stdout.decode().strip()
+        if ws_send:
+            await ws_send(output)
+
+        if public_ip in output:
+            update_step_status("dns_check", "done")
+            if ws_send:
+                await ws_send(f"✓ {check_host} resolves to {public_ip}")
+        else:
+            raise RuntimeError(
+                f"{check_host} does not resolve to {public_ip}. "
+                f"Add a wildcard A record: *.{domain} → {public_ip}"
+            )
+    except Exception as e:
+        update_step_status("dns_check", "error", str(e))
+        if ws_send:
+            await ws_send(f"✗ {e}")
+        raise
+
+
+# ─── Step 8: SSL Certificates ─────────────────────────────────────────────
+
+async def step_ssl_certs(ws_send=None):
+    """Issue Let's Encrypt SSL certificates for admin and mailpit subdomains."""
+    update_step_status("ssl_certs", "running")
+    try:
+        config = load_config()
+        domain = config.get("domain", "")
+        if not domain:
+            raise RuntimeError("No domain configured. Set it in the config above.")
+
+        await run_cmd("apt-get install -y certbot python3-certbot-nginx", ws_send)
+
+        errors = []
+        for sub in ["admin", "mailpit"]:
+            fqdn = f"{sub}.{domain}"
+            if ws_send:
+                await ws_send(f"Requesting certificate for {fqdn}...")
+            try:
+                await run_cmd(
+                    f"certbot --nginx -d {fqdn} --non-interactive "
+                    f"--agree-tos --register-unsafely-without-email "
+                    f"--keep-until-expiring",
+                    ws_send,
+                )
+                if ws_send:
+                    await ws_send(f"✓ SSL certificate issued for {fqdn}")
+            except Exception as e:
+                errors.append(f"{fqdn}: {e}")
+                if ws_send:
+                    await ws_send(f"⚠ SSL for {fqdn} failed: {e}")
+
+        if errors:
+            raise RuntimeError("; ".join(errors))
+
+        update_step_status("ssl_certs", "done")
+        if ws_send:
+            await ws_send("✓ SSL certificates issued")
+    except Exception as e:
+        update_step_status("ssl_certs", "error", str(e))
         if ws_send:
             await ws_send(f"✗ Error: {e}")
         raise
@@ -561,4 +653,8 @@ SETUP_STEPS = {
     "odoo_source": step_odoo_source,
     "nginx": step_nginx,
     "mailpit": step_mailpit,
+    "dns_check": step_dns_check,
+    "ssl_certs": step_ssl_certs,
 }
+
+STEP_ORDER = list(SETUP_STEPS.keys())

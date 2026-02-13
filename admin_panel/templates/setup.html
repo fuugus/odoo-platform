@@ -26,8 +26,11 @@
 </div>
 
 <div class="setup-steps">
-    {% for step_id, step in steps.items() %}
-    <div class="step-card card" id="step-{{ step_id }}" data-status="{{ step.status }}">
+    {% set ns = namespace(all_prev_done=true) %}
+    {% for step_id in step_ids %}
+    {% set step = steps[step_id] %}
+    {% set locked = not ns.all_prev_done %}
+    <div class="step-card card {% if locked %}step-locked{% endif %}" id="step-{{ step_id }}" data-status="{{ step.status }}">
         <div class="step-header">
             <div class="step-info">
                 <span class="step-status-icon">
@@ -39,10 +42,12 @@
                 <h3>{{ step.label }}</h3>
             </div>
             <button class="btn btn-primary" onclick="runStep('{{ step_id }}')"
-                {% if step.status == 'running' %}disabled{% endif %}>
-                {% if step.status == 'done' %}Nochmal ausführen
+                {% if step.status == 'running' or locked %}disabled{% endif %}>
+                {% if locked %}Ausführen
+                {% elif step.status == 'done' %}Nochmal ausführen
                 {% elif step.status == 'running' %}Läuft...
                 {% elif step.status == 'error' %}Retry
+                {% elif step_id == 'dns_check' %}Check
                 {% else %}Ausführen{% endif %}
             </button>
         </div>
@@ -57,6 +62,7 @@
             <pre></pre>
         </div>
     </div>
+    {% if step.status != 'done' %}{% set ns.all_prev_done = false %}{% endif %}
     {% endfor %}
 </div>
 {% endblock %}
@@ -73,6 +79,21 @@ async function saveConfig() {
     });
     if (resp.ok) {
         showToast('Konfiguration gespeichert');
+    }
+}
+
+function unlockNextStep(card) {
+    const next = card.nextElementSibling;
+    if (next && next.classList.contains('step-locked')) {
+        next.classList.remove('step-locked');
+        const btn = next.querySelector('button');
+        if (btn) {
+            btn.disabled = false;
+            if (btn.textContent.trim() === 'Ausführen') {
+                const stepId = next.id.replace('step-', '');
+                btn.textContent = stepId === 'dns_check' ? 'Check' : 'Ausführen';
+            }
+        }
     }
 }
 
@@ -107,7 +128,9 @@ function runStep(stepId) {
                 btn.textContent = 'Nochmal ausführen';
                 btn.disabled = false;
                 card.dataset.status = 'done';
+                card.classList.remove('step-locked');
                 desc.innerHTML = defaultDesc;
+                unlockNextStep(card);
             } else if (data.status === 'error') {
                 statusIcon.innerHTML = '<span class="icon icon-x"></span>';
                 btn.textContent = 'Retry';

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from config import load_config, save_config, PLATFORM_DIR
-from setup_steps import SETUP_STEPS, create_odoo_instance, delete_odoo_instance, run_cmd
+from setup_steps import SETUP_STEPS, STEP_ORDER, create_odoo_instance, delete_odoo_instance, run_cmd
 
 _public_ip_cache = None
 
@@ -97,6 +97,7 @@ async def setup_page(request: Request):
         "request": request,
         "config": config,
         "steps": config["setup_steps"],
+        "step_ids": STEP_ORDER,
     })
 
 

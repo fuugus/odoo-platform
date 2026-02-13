@@ -48,6 +48,7 @@
             </tr>
         </tbody>
     </table>
+    {% if config.setup_steps.dns_check.status != 'done' %}
     <div style="margin-top: 16px; color: var(--text-muted); font-size: 13px; line-height: 1.7;">
         <strong style="color: var(--text);">DNS setup</strong> &mdash; create one wildcard A record at your DNS provider:<br>
         <code>*.{{ config.domain }}</code> &rarr; A &rarr; <code>{{ public_ip }}</code><br>
@@ -55,6 +56,7 @@
         This covers all subdomains: <code>admin</code>, <code>mailpit</code>, <code>client-prod</code>, <code>client-staging</code>, <code>client-dev-name</code>, etc.
         Nginx listens on port 80, reads the <code>Host</code> header, and proxies to the correct Odoo port. No IP configuration is needed on the server itself.
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
