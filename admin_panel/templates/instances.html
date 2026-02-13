@@ -12,19 +12,19 @@
     <div class="form-grid">
         <div class="form-row">
             <label for="new-client">Client:</label>
-            <input type="text" id="new-client" placeholder="kaminfeger" value="kaminfeger">
+            <input type="text" id="new-client" placeholder="kaminfeger" pattern="[a-z]+(-[a-z]+)*" oninput="this.value=this.value.toLowerCase().replace(/[^a-z-]/g,'')">
         </div>
         <div class="form-row">
             <label for="new-env">Environment:</label>
             <select id="new-env" onchange="toggleDevName()">
-                <option value="prod">Production</option>
+                <option value="prod" selected>Production</option>
                 <option value="staging">Staging</option>
-                <option value="dev" selected>Development</option>
+                <option value="dev">Development</option>
             </select>
         </div>
-        <div class="form-row" id="dev-name-row">
+        <div class="form-row" id="dev-name-row" style="display:none">
             <label for="new-dev-name">Developer:</label>
-            <input type="text" id="new-dev-name" placeholder="samuel">
+            <input type="text" id="new-dev-name" placeholder="samuel" pattern="[a-z]+(-[a-z]+)*" oninput="this.value=this.value.toLowerCase().replace(/[^a-z-]/g,'')">
         </div>
     </div>
     <button class="btn btn-primary" onclick="createInstance()">Create Instance</button>
@@ -42,6 +42,9 @@
                 <th>Client</th>
                 <th>Env</th>
                 <th>Port</th>
+                <th>Workers</th>
+                <th>Master PW</th>
+                <th>Admin PW</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -53,8 +56,11 @@
             <tr id="row-{{ name }}">
                 <td><a href="https://{{ fqdn }}" target="_blank">{{ inst.client }}</a></td>
                 <td><a href="https://{{ fqdn }}" target="_blank"><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></a></td>
-                <td><a href="https://{{ fqdn }}" target="_blank">{{ inst.port }}</a></td>
-                <td>
+                <td><a href="https://{{ fqdn }}" target="_blank">{% if inst.workers | default(0) > 0 %}{{ inst.port }}/{{ inst.port + 1 }}{% else %}{{ inst.port }}{% endif %}</a></td>
+                <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}"></td>
+                <td><span class="pw-value" onclick="copyText(this)" title="Click to copy">{{ inst.master_pw | default('–') }}</span></td>
+                <td><span class="pw-value" onclick="copyText(this)" title="Click to copy">{{ inst.admin_pw | default('–') }}</span></td>
+                <td id="status-{{ name }}">
                     <a href="https://{{ fqdn }}" target="_blank">
                         <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
                         {{ inst.status }}
@@ -90,7 +96,7 @@
             <tr><td>8080</td><td>Admin Panel</td></tr>
             {% if instances %}
             {% set ports = instances.values() | map(attribute='port') | list | sort %}
-            <tr><td>{{ ports | first }}–{{ ports | last }}</td><td>Odoo Instances ({{ instances | length }})</td></tr>
+            <tr><td>{{ ports | first }}–{{ ports | last + 1 }}</td><td>Odoo Instances ({{ instances | length }})</td></tr>
             {% else %}
             <tr><td>8069+</td><td>Odoo Instances</td></tr>
             {% endif %}
@@ -111,8 +117,9 @@ function createInstance() {
     const env = document.getElementById('new-env').value;
     const devName = document.getElementById('new-dev-name').value;
 
-    if (!client) { showToast('Client name required', 'error'); return; }
-    if (env === 'dev' && !devName) { showToast('Developer name required', 'error'); return; }
+    const nameRe = /^[a-z]+(-[a-z]+)*$/;
+    if (!client || !nameRe.test(client)) { showToast('Client: lowercase letters and hyphens only', 'error'); return; }
+    if (env === 'dev' && (!devName || !nameRe.test(devName))) { showToast('Developer: lowercase letters and hyphens only', 'error'); return; }
 
     const logDiv = document.getElementById('create-log');
     const logPre = logDiv.querySelector('pre');
@@ -134,7 +141,7 @@ function createInstance() {
         } else if (data.type === 'status' && data.status === 'done') {
             logPre.textContent += '\n✓ Instance created!\n';
             showToast('Instance created');
-            setTimeout(() => location.reload(), 2000);
+            setTimeout(() => location.reload(), 1500);
         } else if (data.type === 'error') {
             logPre.textContent += `ERROR: ${data.message}\n`;
             showToast('Error', 'error');
@@ -162,7 +169,6 @@ function syncInstance(name) {
         } else if (data.type === 'status' && data.status === 'done') {
             logPre.textContent += '\n✓ Sync complete!\n';
             showToast('Instance synced from prod');
-            setTimeout(() => location.reload(), 2000);
         } else if (data.type === 'error') {
             logPre.textContent += `ERROR: ${data.message}\n`;
             showToast('Sync failed', 'error');
@@ -173,23 +179,70 @@ function syncInstance(name) {
 async function restartInstance(name) {
     if (!confirm(`Restart ${name}?`)) return;
     const resp = await fetch(`/api/instances/${name}/restart`, {method: 'POST'});
-    resp.ok ? showToast('Restarted') : showToast('Error', 'error');
-    setTimeout(() => location.reload(), 2000);
+    resp.ok ? showToast('Restarting...') : showToast('Error', 'error');
 }
 
 async function stopInstance(name) {
     if (!confirm(`Stop ${name}?`)) return;
     await fetch(`/api/instances/${name}/stop`, {method: 'POST'});
-    showToast('Stopped');
-    setTimeout(() => location.reload(), 1000);
+    showToast('Stopping...');
 }
 
 async function deleteInstance(name) {
     if (!confirm(`Permanently DELETE ${name}? (including database)`)) return;
     if (!confirm(`Are you sure? This cannot be undone.`)) return;
     const resp = await fetch(`/api/instances/${name}`, {method: 'DELETE'});
-    resp.ok ? showToast('Deleted') : showToast('Error', 'error');
-    setTimeout(() => location.reload(), 1000);
+    if (resp.ok) {
+        document.getElementById('row-' + name)?.remove();
+        showToast('Deleted');
+    } else {
+        showToast('Error', 'error');
+    }
 }
+
+async function updateWorkers(name, value) {
+    const resp = await fetch(`/api/instances/${name}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({workers: parseInt(value)})
+    });
+    if (resp.ok) {
+        document.getElementById('workers-' + name).classList.add('pending');
+        showToast('Workers saved');
+    } else {
+        showToast('Error updating workers', 'error');
+    }
+}
+
+function copyText(el) {
+    navigator.clipboard.writeText(el.textContent);
+    showToast('Copied');
+}
+
+async function pollStatus() {
+    try {
+        const resp = await fetch('/api/instances');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        for (const [name, inst] of Object.entries(data)) {
+            const cell = document.getElementById('status-' + name);
+            if (!cell) continue;
+            const dot = cell.querySelector('.status-dot');
+            const link = cell.querySelector('a');
+            if (dot) {
+                dot.className = 'status-dot ' + (inst.status === 'active' ? 'status-active' : 'status-inactive');
+            }
+            if (link) {
+                link.lastChild.textContent = inst.status;
+            }
+            const input = document.getElementById('workers-' + name);
+            if (input && !inst.restart_needed) {
+                input.classList.remove('pending');
+            }
+        }
+    } catch {}
+}
+
+setInterval(pollStatus, 2000);
 </script>
 {% endblock %}

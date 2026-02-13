@@ -378,6 +378,32 @@ input:focus, select:focus {
     width: 80px;
 }
 
+.inline-input {
+    width: 56px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-input);
+    font-size: 13px;
+    text-align: center;
+}
+.inline-input.pending {
+    color: var(--text-muted);
+}
+
+.pw-value {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+.pw-value:hover {
+    background: var(--bg-input);
+    color: var(--text);
+}
+
 /* ─── Badges ─────────────────────────────────────────────────────────────── */
 
 .badge {

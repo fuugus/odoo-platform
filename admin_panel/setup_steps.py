@@ -4,6 +4,9 @@ shell commands and reports progress via WebSocket.
 """
 import asyncio
 import os
+import re
+import secrets
+import string
 import subprocess
 from pathlib import Path
 from config import load_config, save_config, update_step_status, PLATFORM_DIR
@@ -481,7 +484,7 @@ server {{
     proxy_set_header X-Forwarded-Proto $scheme;
 
     location /websocket {{
-        proxy_pass http://127.0.0.1:{port};
+        proxy_pass http://127.0.0.1:{port + 1};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -526,13 +529,26 @@ async def reload_nginx(ws_send=None):
 
 # ─── Instance Management ────────────────────────────────────────────────────
 
-async def create_odoo_instance(client: str, env: str, port: int, ws_send=None):
+def _generate_password(length=16):
+    """Generate a random alphanumeric password."""
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+_NAME_RE = re.compile(r'^[a-z]+(-[a-z]+)*$')
+
+
+async def create_odoo_instance(client: str, env: str, port: int, workers: int = 2, ws_send=None):
     """Create a new Odoo instance with its own systemd service and config."""
+    if not _NAME_RE.match(client):
+        raise ValueError(f"Invalid client name: {client} (lowercase letters and hyphens only)")
     instance_name = f"{client}_{env}"
     db_name = instance_name
     conf_dir = "/etc/odoo"
     log_dir = "/var/log/odoo"
     data_dir = f"/opt/odoo/data/{instance_name}"
+    master_pw = _generate_password()
+    admin_pw = _generate_password()
 
     await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir}", ws_send)
     await run_cmd(f"chown odoo:odoo {data_dir} {log_dir}", ws_send)
@@ -547,7 +563,7 @@ async def create_odoo_instance(client: str, env: str, port: int, ws_send=None):
 
     # Create Odoo config file
     odoo_conf = f"""[options]
-admin_passwd = admin
+admin_passwd = {master_pw}
 db_host = False
 db_port = False
 db_user = odoo
@@ -559,11 +575,12 @@ data_dir = {data_dir}
 logfile = {log_dir}/{instance_name}.log
 log_level = info
 http_port = {port}
+gevent_port = {port + 1}
 proxy_mode = True
 smtp_server = {smtp_host}
 smtp_port = {smtp_port}
-workers = 2
-max_cron_threads = 1
+workers = {workers}
+max_cron_threads = {1 if workers > 0 else 0}
 limit_memory_hard = 2684354560
 limit_memory_soft = 2147483648
 limit_time_cpu = 600
@@ -619,6 +636,14 @@ WantedBy=multi-user.target
         if ws_send:
             await ws_send("Database already initialized, skipping")
 
+    # Set admin user password
+    if ws_send:
+        await ws_send("Setting admin user password...")
+    await run_cmd(
+        f"su - postgres -c \"psql -d {db_name} -c \\\"UPDATE res_users SET password='{admin_pw}' WHERE id=2\\\"\"",
+        ws_send,
+    )
+
     # Enable and start
     await run_cmd("systemctl daemon-reload", ws_send)
     await run_cmd(f"systemctl enable odoo-{instance_name}", ws_send)
@@ -630,6 +655,9 @@ WantedBy=multi-user.target
         "client": client,
         "env": env,
         "port": port,
+        "workers": workers,
+        "master_pw": master_pw,
+        "admin_pw": admin_pw,
         "db_name": db_name,
         "service": f"odoo-{instance_name}",
         "conf": conf_path,

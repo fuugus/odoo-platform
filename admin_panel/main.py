@@ -5,6 +5,7 @@ Main application with setup wizard, instance management, and deployment.
 import asyncio
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -73,12 +74,17 @@ RESERVED_PORTS = {8025, 8080, 1025}
 
 
 def get_next_port() -> int:
-    """Get the next available port starting from 8069."""
+    """Get the next available port starting from 8069.
+    Each instance uses two consecutive ports: HTTP and gevent (HTTP+1).
+    """
     config = load_config()
-    used = set(inst["port"] for inst in config["instances"].values())
+    used = set()
+    for inst in config["instances"].values():
+        p = inst["port"]
+        used.update({p, p + 1})
     used.update(RESERVED_PORTS)
     port = 8069
-    while port in used:
+    while port in used or (port + 1) in used:
         port += 1
     return port
 
@@ -220,6 +226,8 @@ async def api_create_instance(request: Request):
     env = data.get("env", "dev")
     dev_name = data.get("dev_name", "")
     port = data.get("port", get_next_port())
+    default_workers = {"prod": 4, "staging": 2}.get(env, 0)
+    workers = int(data.get("workers", default_workers))
 
     if not client:
         raise HTTPException(status_code=400, detail="client is required")
@@ -229,7 +237,7 @@ async def api_create_instance(request: Request):
     else:
         actual_env = env
 
-    await create_odoo_instance(client, actual_env, port)
+    await create_odoo_instance(client, actual_env, port, workers)
     return {"status": "ok", "instance": f"{client}_{actual_env}", "port": port}
 
 
@@ -254,6 +262,8 @@ async def api_restart_instance(instance_name: str):
     )
     if result.returncode != 0:
         raise HTTPException(status_code=500, detail=result.stderr)
+    instance.pop("restart_needed", None)
+    save_config(config)
     return {"status": "ok"}
 
 
@@ -266,6 +276,32 @@ async def api_stop_instance(instance_name: str):
         raise HTTPException(status_code=404, detail="Instance not found")
     service = instance["service"]
     subprocess.run(["systemctl", "stop", service], capture_output=True, timeout=30)
+    return {"status": "ok"}
+
+
+@app.patch("/api/instances/{instance_name}")
+async def api_update_instance(instance_name: str, request: Request):
+    """Update instance settings (e.g. workers)."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    data = await request.json()
+    workers = data.get("workers")
+    if workers is not None:
+        workers = int(workers)
+        instance["workers"] = workers
+        conf_path = instance["conf"]
+        with open(conf_path, "r") as f:
+            conf = f.read()
+        conf = re.sub(r"^workers\s*=.*$", f"workers = {workers}", conf, flags=re.MULTILINE)
+        conf = re.sub(r"^max_cron_threads\s*=.*$", f"max_cron_threads = {1 if workers > 0 else 0}", conf, flags=re.MULTILINE)
+        with open(conf_path, "w") as f:
+            f.write(conf)
+        instance["restart_needed"] = True
+        save_config(config)
+
     return {"status": "ok"}
 
 
@@ -383,6 +419,8 @@ async def ws_create_instance(websocket: WebSocket):
         env = data.get("env", "dev")
         dev_name = data.get("dev_name", "")
         port = data.get("port", get_next_port())
+        default_workers = {"prod": 4, "staging": 2}.get(env, 0)
+        workers = int(data.get("workers", default_workers))
 
         if env == "dev" and dev_name:
             actual_env = f"dev_{dev_name}"
@@ -393,7 +431,7 @@ async def ws_create_instance(websocket: WebSocket):
             await websocket.send_json({"type": "log", "message": message})
 
         await websocket.send_json({"type": "status", "status": "running"})
-        await create_odoo_instance(client, actual_env, port, ws_send)
+        await create_odoo_instance(client, actual_env, port, workers, ws_send)
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})
