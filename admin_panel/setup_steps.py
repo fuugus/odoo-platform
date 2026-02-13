@@ -310,8 +310,14 @@ server {
 }
 """
         conf_path = "/etc/nginx/sites-available/odoo-platform"
-        with open(conf_path, "w") as f:
-            f.write(nginx_conf)
+        if not Path(conf_path).exists():
+            with open(conf_path, "w") as f:
+                f.write(nginx_conf)
+            if ws_send:
+                await ws_send("Nginx config written")
+        else:
+            if ws_send:
+                await ws_send("Nginx config already exists, keeping it (certbot may have modified it)")
 
         # Enable site
         await run_cmd(
@@ -321,15 +327,28 @@ server {
         await run_cmd("rm -f /etc/nginx/sites-enabled/default", ws_send)
         await run_cmd("nginx -t", ws_send)
         await run_cmd("systemctl enable nginx", ws_send)
-        await run_cmd("systemctl restart nginx", ws_send)
+        await run_cmd("systemctl reload nginx || systemctl start nginx", ws_send)
+
+        # SSL certs for admin and mailpit (skip if DNS not ready)
+        config = load_config()
+        domain = config.get("domain", "")
+        if domain:
+            for sub in ["admin", "mailpit"]:
+                fqdn = f"{sub}.{domain}"
+                try:
+                    await run_cmd(
+                        f"certbot --nginx -d {fqdn} --non-interactive "
+                        f"--agree-tos --register-unsafely-without-email "
+                        f"--keep-until-expiring",
+                        ws_send,
+                    )
+                except Exception:
+                    if ws_send:
+                        await ws_send(f"SSL for {fqdn} skipped (DNS not ready?)")
 
         update_step_status("nginx", "done")
         if ws_send:
             await ws_send("✓ Nginx installed and configured")
-            await ws_send(
-                "Note: Run certbot manually for wildcard SSL "
-                "(requires DNS challenge for your wildcard domain)"
-            )
     except Exception as e:
         update_step_status("nginx", "error", str(e))
         if ws_send:
@@ -485,6 +504,22 @@ WantedBy=multi-user.target
         "conf": conf_path,
     }
     save_config(config)
+
+    # SSL cert for the instance subdomain
+    domain = config.get("domain", "")
+    if domain:
+        env_prefix = env.replace("_", "-")
+        fqdn = f"{client}-{env_prefix}.{domain}"
+        try:
+            await run_cmd(
+                f"certbot --nginx -d {fqdn} --non-interactive "
+                f"--agree-tos --register-unsafely-without-email "
+                f"--keep-until-expiring",
+                ws_send,
+            )
+        except Exception:
+            if ws_send:
+                await ws_send(f"SSL for {fqdn} skipped (DNS not ready?)")
 
     if ws_send:
         await ws_send(f"Instance {instance_name} created on port {port}")

@@ -11,7 +11,6 @@ CONFIG_FILE = PLATFORM_DIR / "platform.json"
 # Defaults
 DEFAULT_CONFIG = {
     "domain": "odoo.binaryone.ch",
-    "letsencrypt_email": "",
     "github_token": "",
     "odoo_version": "19.0",
     "pg_version": "16",
@@ -20,7 +19,7 @@ DEFAULT_CONFIG = {
         "postgresql": {"status": "pending", "label": "PostgreSQL 16", "description": "Adds the official PostgreSQL repo and installs v16."},
         "wkhtmltopdf": {"status": "pending", "label": "wkhtmltopdf", "description": "Patched Qt build required by Odoo for PDF reports."},
         "odoo_source": {"status": "pending", "label": "Odoo 19 Enterprise Source-Install", "description": "Clones Community + Enterprise repos. Requires GitHub token above."},
-        "nginx": {"status": "pending", "label": "Nginx + Wildcard SSL", "description": "Reverse proxy routing subdomains to Odoo instances by port."},
+        "nginx": {"status": "pending", "label": "Nginx + SSL", "description": "Reverse proxy with auto SSL certs for each subdomain."},
         "mailpit": {"status": "pending", "label": "Mailpit", "description": "Local SMTP catch-all for dev/staging emails."},
     },
     "instances": {},
