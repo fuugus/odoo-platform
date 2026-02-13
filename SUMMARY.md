@@ -26,17 +26,6 @@ Self-hosted Odoo.sh alternative. Single repo that provisions an Ubuntu server wi
 - Git-based deployment (pull + restart)
 - JSON config state (`platform.json`)
 
-**Not yet implemented:**
-- Authentication on admin panel
-- Backup/restore
-- Automated SSL (wildcard requires manual DNS challenge)
-- Schema-sync between environments
-- Monitoring/alerting
-- CI/tests
-
-## Codebase
-
-~1,600 lines total (3 Python modules + 6 HTML templates). Clean, compact, idempotent setup steps.
 
 ## Access
 
