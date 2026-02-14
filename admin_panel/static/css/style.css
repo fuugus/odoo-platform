@@ -317,7 +317,8 @@ input:focus, select:focus {
 /* ─── Tables ─────────────────────────────────────────────────────────────── */
 
 .data-table {
-    width: 100%;
+    width: calc(100% + 20px);
+    margin-left: -10px;
     border-collapse: collapse;
     margin-top: 8px;
 }
