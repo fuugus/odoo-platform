@@ -97,3 +97,4 @@ No test suite or linter is configured.
 - **Commit message format.** First line is a short summary. Follow with a blank line, then bullet points (no dashes or asterisks — just plain lines) describing each meaningful change.
 - **English only.** All code, comments, UI text, and documentation must be in professional English. No German or other languages.
 - **Restart services after code changes.** After editing backend files, run `systemctl restart odoo-admin-panel` (and any affected Odoo instance services) so changes take effect. The production service does not auto-reload.
+- **Never commit or push autonomously.** Only run `git commit` and `git push` when the user explicitly asks. Always wait for confirmation before committing or pushing.
