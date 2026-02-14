@@ -349,6 +349,36 @@ input:focus, select:focus {
     background: var(--primary-light);
 }
 
+.data-table tr:hover td:first-child {
+    position: relative;
+}
+
+.data-table tr:hover td:first-child::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -10px;
+    width: 10px;
+    bottom: 0;
+    background: var(--primary-light);
+    border-top: 1px solid var(--border-light);
+}
+
+.data-table tr:hover td:last-child {
+    position: relative;
+}
+
+.data-table tr:hover td:last-child::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    right: -10px;
+    width: 10px;
+    bottom: 0;
+    background: var(--primary-light);
+    border-top: 1px solid var(--border-light);
+}
+
 .data-table code {
     background: var(--bg-input);
     padding: 2px 5px;
