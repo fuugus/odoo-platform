@@ -40,7 +40,14 @@ ssh -L 8080:localhost:8080 root@your-server-ip
 
 This forwards port 8080 — you'll use `http://localhost:8080` to access the admin panel.
 
-## 3. Clone and Bootstrap
+## 3. Install Git
+
+```bash
+sudo apt update
+sudo apt install git
+```
+
+## 4. Clone and Bootstrap
 
 ```bash
 git clone https://github.com/fuugus/odoo-platform.git /root/odoo-platform
@@ -51,7 +58,16 @@ chmod +x bootstrap.sh
 
 The bootstrap script installs Python dependencies and starts the admin panel as a systemd service on port 8080.
 
-## 4. Install Claude Code (optional)
+## 5. Install Node.js (optional)
+
+Required for Claude Code:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+## 6. Install Claude Code (optional)
 
 For AI-assisted server management:
 
@@ -61,7 +77,7 @@ cd /root/odoo-platform
 claude
 ```
 
-## 5. Access the Admin Panel
+## 7. Access the Admin Panel
 
 Open `http://localhost:8080` in your browser (via the SSH tunnel from step 2).
 
