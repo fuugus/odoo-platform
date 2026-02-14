@@ -12,28 +12,77 @@ CONFIG_FILE = PLATFORM_DIR / "platform.json"
 DEFAULT_CONFIG = {
     "domain": "odoo.binaryone.ch",
     "github_token": "",
-    "odoo_version": "19.0",
     "pg_version": "16",
+    "custom_addons_repos": {
+        "19": "",
+        "18": "",
+    },
     "setup_steps": {
-        "system_update": {"status": "pending", "label": "System Update & Packages", "description": "Installs build tools, Python dev headers, and image libraries."},
-        "postgresql": {"status": "pending", "label": "PostgreSQL 16", "description": "Adds the official PostgreSQL repo and installs v16."},
-        "wkhtmltopdf": {"status": "pending", "label": "wkhtmltopdf", "description": "Patched Qt build required by Odoo for PDF reports."},
-        "odoo_source": {"status": "pending", "label": "Odoo 19 Enterprise Source Install", "description": "Clones Community + Enterprise repos. Requires GitHub token above."},
-        "nginx": {"status": "pending", "label": "Nginx Reverse Proxy", "description": "Routes subdomains to Odoo instances by port."},
-        "mailpit": {"status": "pending", "label": "Mailpit", "description": "Local SMTP catch-all for dev/staging emails."},
-        "dns_check": {"status": "pending", "label": "DNS Check", "description": "Verify that *.domain resolves to this server's IP."},
-        "ssl_certs": {"status": "pending", "label": "SSL Certificates", "description": "Issues Let's Encrypt certs for admin and mailpit."},
+        "system_update": {"status": "pending", "label": "System Update & Packages", "description": "Installs build tools, Python dev headers, and image libraries.", "message": ""},
+        "postgresql": {"status": "pending", "label": "PostgreSQL 16", "description": "Adds the official PostgreSQL repo and installs v16.", "message": ""},
+        "wkhtmltopdf": {"status": "pending", "label": "wkhtmltopdf", "description": "Patched Qt build required by Odoo for PDF reports.", "message": ""},
+        "odoo_19": {"status": "pending", "label": "Odoo 19 Source", "description": "Clones Community + Enterprise 19.0, creates Python venv.", "message": ""},
+        "odoo_18": {"status": "pending", "label": "Odoo 18 Source", "description": "Clones Community + Enterprise 18.0, creates Python venv.", "message": ""},
+        "nginx": {"status": "pending", "label": "Nginx Reverse Proxy", "description": "Routes subdomains to Odoo instances by port.", "message": ""},
+        "mailpit": {"status": "pending", "label": "Mailpit", "description": "Local SMTP catch-all for dev/staging emails.", "message": ""},
+        "dns_check": {"status": "pending", "label": "DNS Check", "description": "Verify that *.domain resolves to this server's IP.", "message": ""},
+        "ssl_certs": {"status": "pending", "label": "SSL Certificates", "description": "Issues Let's Encrypt certs for admin and mailpit.", "message": ""},
     },
     "instances": {},
     "clients": {},
 }
 
 
+def migrate_config(config: dict) -> dict:
+    """Migrate config from old schema to new multi-version schema."""
+    changed = False
+    steps = config.get("setup_steps", {})
+
+    # Migrate odoo_source -> odoo_19 + odoo_18
+    if "odoo_source" in steps:
+        old = steps.pop("odoo_source")
+        steps["odoo_19"] = {
+            "status": old.get("status", "pending"),
+            "label": "Odoo 19 Source",
+            "description": "Clones Community + Enterprise 19.0, creates Python venv.",
+            "message": old.get("message", ""),
+        }
+        steps["odoo_18"] = {
+            "status": "pending",
+            "label": "Odoo 18 Source",
+            "description": "Clones Community + Enterprise 18.0, creates Python venv.",
+            "message": "",
+        }
+        changed = True
+
+    # Remove old odoo_version field
+    if "odoo_version" in config:
+        del config["odoo_version"]
+        changed = True
+
+    # Add custom_addons_repos if missing
+    if "custom_addons_repos" not in config:
+        config["custom_addons_repos"] = {"19": "", "18": ""}
+        changed = True
+
+    # Add version field to existing instances
+    for name, inst in config.get("instances", {}).items():
+        if "version" not in inst:
+            inst["version"] = "19"
+            changed = True
+
+    if changed:
+        save_config(config)
+
+    return config
+
+
 def load_config() -> dict:
     """Load platform config from disk, or return defaults."""
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE) as f:
-            return json.load(f)
+            config = json.load(f)
+        return migrate_config(config)
     return DEFAULT_CONFIG.copy()
 
 

@@ -46,7 +46,7 @@ async def step_system_update(ws_send=None):
         await run_cmd("apt-get update -y", ws_send)
         await run_cmd("apt-get upgrade -y", ws_send)
         await run_cmd(
-            "apt-get install -y build-essential wget curl git "
+            "apt-get install -y build-essential wget curl git rsync "
             "python3-dev python3-pip python3-venv python3-wheel "
             "libxml2-dev libxslt1-dev libldap2-dev libsasl2-dev "
             "libtiff5-dev libjpeg8-dev libopenjp2-7-dev zlib1g-dev "
@@ -57,11 +57,11 @@ async def step_system_update(ws_send=None):
         )
         update_step_status("system_update", "done")
         if ws_send:
-            await ws_send("✓ System update complete")
+            await ws_send("OK System update complete")
     except Exception as e:
         update_step_status("system_update", "error", str(e))
         if ws_send:
-            await ws_send(f"✗ Error: {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
@@ -97,11 +97,11 @@ async def step_postgresql(ws_send=None):
 
         update_step_status("postgresql", "done")
         if ws_send:
-            await ws_send("✓ PostgreSQL 16 installed and configured")
+            await ws_send("OK PostgreSQL 16 installed and configured")
     except Exception as e:
         update_step_status("postgresql", "error", str(e))
         if ws_send:
-            await ws_send(f"✗ Error: {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
@@ -121,49 +121,65 @@ async def step_wkhtmltopdf(ws_send=None):
 
         update_step_status("wkhtmltopdf", "done")
         if ws_send:
-            await ws_send("✓ wkhtmltopdf installed")
+            await ws_send("OK wkhtmltopdf installed")
     except Exception as e:
         update_step_status("wkhtmltopdf", "error", str(e))
         if ws_send:
-            await ws_send(f"✗ Error: {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
-# ─── Step 4: Odoo 19 Enterprise Source Install ──────────────────────────────
+# ─── Step 4/5: Odoo Version Source Install ──────────────────────────────────
 
-async def step_odoo_source(ws_send=None):
-    """Clone Odoo 19 Community + Enterprise from GitHub and install Python dependencies."""
-    update_step_status("odoo_source", "running")
+def odoo_base_dir(version: str) -> str:
+    """Return the base directory for a given Odoo version, e.g. /opt/odoo19."""
+    return f"/opt/odoo{version}"
+
+
+async def step_odoo_version(version: str, ws_send=None):
+    """Clone Odoo Community + Enterprise for a specific version and install Python dependencies."""
+    step_id = f"odoo_{version}"
+    branch = f"{version}.0"
+    update_step_status(step_id, "running")
     try:
         config = load_config()
         github_token = config.get("github_token", "")
         if not github_token:
             raise RuntimeError("GitHub token is required for Enterprise repo. Set it in the config above.")
 
-        odoo_dir = "/opt/odoo"
-        odoo_src = f"{odoo_dir}/odoo"
-        enterprise_src = f"{odoo_dir}/enterprise"
-        custom_addons = f"{odoo_dir}/custom-addons"
-        venv_dir = f"{odoo_dir}/venv"
+        base = odoo_base_dir(version)
+        odoo_src = f"{base}/odoo"
+        enterprise_src = f"{base}/enterprise"
+        custom_addons = f"{base}/custom-addons"
+        venv_dir = f"{base}/venv"
 
         community_url = "https://github.com/odoo/odoo.git"
         enterprise_url = f"https://{github_token}@github.com/odoo/enterprise.git"
 
+        # One-time migration: move /opt/odoo -> /opt/odoo19 if old layout exists
+        if version == "19":
+            old_dir = Path("/opt/odoo")
+            new_dir = Path(base)
+            if (old_dir / "odoo" / "odoo-bin").exists() and not (new_dir / "odoo" / "odoo-bin").exists():
+                if ws_send:
+                    await ws_send(f"Migrating /opt/odoo -> {base}...")
+                await run_cmd(f"mv /opt/odoo {base}", ws_send)
+
         # Create odoo system user (idempotent)
         await run_cmd(
-            "id -u odoo >/dev/null 2>&1 || useradd -m -d /opt/odoo -U -r -s /bin/bash odoo",
+            "id -u odoo >/dev/null 2>&1 || useradd -m -d /opt -U -r -s /bin/bash odoo",
             ws_send,
         )
 
         # Create directories
-        await run_cmd(f"mkdir -p {odoo_src} {enterprise_src} {custom_addons}", ws_send)
+        await run_cmd(f"mkdir -p {odoo_src} {enterprise_src} {custom_addons} {base}/data", ws_send)
 
         # Clone Odoo Community
         if ws_send:
-            await ws_send("Cloning Odoo 19 Community...")
+            await ws_send(f"Cloning Odoo {version} Community...")
         if not Path(f"{odoo_src}/.git").exists():
             await run_cmd(
-                f"git clone --depth 1 --branch 19.0 {community_url} {odoo_src}",
+                f"git clone --depth 1 --branch {branch} {community_url} {odoo_src}",
                 ws_send,
             )
         else:
@@ -173,16 +189,28 @@ async def step_odoo_source(ws_send=None):
 
         # Clone Odoo Enterprise
         if ws_send:
-            await ws_send("Cloning Odoo 19 Enterprise...")
+            await ws_send(f"Cloning Odoo {version} Enterprise...")
         if not Path(f"{enterprise_src}/.git").exists():
             await run_cmd(
-                f"git clone --depth 1 --branch 19.0 {enterprise_url} {enterprise_src}",
+                f"git clone --depth 1 --branch {branch} {enterprise_url} {enterprise_src}",
                 ws_send,
             )
         else:
             await run_cmd(f"cd {enterprise_src} && git pull", ws_send)
             if ws_send:
                 await ws_send("Enterprise already cloned, pulled latest")
+
+        # Clone custom addons repo (optional)
+        addons_repo = config.get("custom_addons_repos", {}).get(version, "")
+        if addons_repo:
+            if ws_send:
+                await ws_send(f"Cloning custom addons for v{version}...")
+            if not Path(f"{custom_addons}/.git").exists():
+                await run_cmd(f"git clone {addons_repo} {custom_addons}", ws_send)
+            else:
+                await run_cmd(f"cd {custom_addons} && git pull", ws_send)
+                if ws_send:
+                    await ws_send("Custom addons already cloned, pulled latest")
 
         # Create venv and install deps
         if not Path(venv_dir).exists():
@@ -198,19 +226,27 @@ async def step_odoo_source(ws_send=None):
         )
 
         # Set ownership
-        await run_cmd(f"chown -R odoo:odoo {odoo_dir}", ws_send)
+        await run_cmd(f"chown -R odoo:odoo {base}", ws_send)
 
-        update_step_status("odoo_source", "done")
+        update_step_status(step_id, "done")
         if ws_send:
-            await ws_send("✓ Odoo 19 Community + Enterprise installed")
+            await ws_send(f"OK Odoo {version} Community + Enterprise installed")
     except Exception as e:
-        update_step_status("odoo_source", "error", str(e))
+        update_step_status(step_id, "error", str(e))
         if ws_send:
-            await ws_send(f"✗ Error: {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
-# ─── Step 5: Nginx Reverse Proxy ───────────────────────────────────────────
+async def step_odoo_19(ws_send=None):
+    await step_odoo_version("19", ws_send)
+
+
+async def step_odoo_18(ws_send=None):
+    await step_odoo_version("18", ws_send)
+
+
+# ─── Step 6: Nginx Reverse Proxy ───────────────────────────────────────────
 
 async def step_nginx(ws_send=None):
     """Install Nginx and configure reverse proxy with per-instance config files."""
@@ -299,15 +335,15 @@ server {
 
         update_step_status("nginx", "done")
         if ws_send:
-            await ws_send("✓ Nginx installed and configured")
+            await ws_send("OK Nginx installed and configured")
     except Exception as e:
         update_step_status("nginx", "error", str(e))
         if ws_send:
-            await ws_send(f"✗ Error: {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
-# ─── Step 6: Mailpit ────────────────────────────────────────────────────────
+# ─── Step 7: Mailpit ────────────────────────────────────────────────────────
 
 async def step_mailpit(ws_send=None):
     """Install Mailpit for catching dev/staging emails."""
@@ -342,15 +378,15 @@ WantedBy=multi-user.target
 
         update_step_status("mailpit", "done")
         if ws_send:
-            await ws_send("✓ Mailpit installed (SMTP :1025, Web UI :8025)")
+            await ws_send("OK Mailpit installed (SMTP :1025, Web UI :8025)")
     except Exception as e:
         update_step_status("mailpit", "error", str(e))
         if ws_send:
-            await ws_send(f"✗ Error: {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
-# ─── Step 7: DNS Check ─────────────────────────────────────────────────────
+# ─── Step 8: DNS Check ─────────────────────────────────────────────────────
 
 async def step_dns_check(ws_send=None):
     """Verify that *.domain resolves to this server's public IP."""
@@ -401,20 +437,20 @@ async def step_dns_check(ws_send=None):
         if public_ip in output:
             update_step_status("dns_check", "done")
             if ws_send:
-                await ws_send(f"✓ {check_host} resolves to {public_ip}")
+                await ws_send(f"OK {check_host} resolves to {public_ip}")
         else:
             raise RuntimeError(
                 f"{check_host} does not resolve to {public_ip}. "
-                f"Add a wildcard A record: *.{domain} → {public_ip}"
+                f"Add a wildcard A record: *.{domain} -> {public_ip}"
             )
     except Exception as e:
         update_step_status("dns_check", "error", str(e))
         if ws_send:
-            await ws_send(f"✗ {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
-# ─── Step 8: SSL Certificates ─────────────────────────────────────────────
+# ─── Step 9: SSL Certificates ─────────────────────────────────────────────
 
 async def step_ssl_certs(ws_send=None):
     """Issue Let's Encrypt SSL certificates for admin, mailpit, and all instances."""
@@ -445,22 +481,22 @@ async def step_ssl_certs(ws_send=None):
                     ws_send,
                 )
                 if ws_send:
-                    await ws_send(f"✓ SSL certificate issued for {fqdn}")
+                    await ws_send(f"OK SSL certificate issued for {fqdn}")
             except Exception as e:
                 errors.append(f"{fqdn}: {e}")
                 if ws_send:
-                    await ws_send(f"⚠ SSL for {fqdn} failed: {e}")
+                    await ws_send(f"Warning: SSL for {fqdn} failed: {e}")
 
         if errors:
             raise RuntimeError("; ".join(errors))
 
         update_step_status("ssl_certs", "done")
         if ws_send:
-            await ws_send("✓ SSL certificates issued")
+            await ws_send("OK SSL certificates issued")
     except Exception as e:
         update_step_status("ssl_certs", "error", str(e))
         if ws_send:
-            await ws_send(f"✗ Error: {e}")
+            await ws_send(f"Error: {e}")
         raise
 
 
@@ -538,20 +574,33 @@ def _generate_password(length=16):
 _NAME_RE = re.compile(r'^[a-z]+(-[a-z]+)*$')
 
 
-async def create_odoo_instance(client: str, env: str, port: int, workers: int = 2, ws_send=None):
+async def create_odoo_instance(client: str, env: str, port: int, workers: int = 2, ws_send=None, version: str = "19"):
     """Create a new Odoo instance with its own systemd service and config."""
     if not _NAME_RE.match(client):
         raise ValueError(f"Invalid client name: {client} (lowercase letters and hyphens only)")
+
+    base = odoo_base_dir(version)
     instance_name = f"{client}_{env}"
     db_name = instance_name
     conf_dir = "/etc/odoo"
     log_dir = "/var/log/odoo"
-    data_dir = f"/opt/odoo/data/{instance_name}"
+    data_dir = f"{base}/data/{instance_name}"
+    instance_addons = f"{data_dir}/addons"
     master_pw = _generate_password()
     admin_pw = _generate_password()
 
-    await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir}", ws_send)
+    await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir} {instance_addons}", ws_send)
     await run_cmd(f"chown odoo:odoo {data_dir} {log_dir}", ws_send)
+
+    # Copy custom addons to per-instance dir
+    shared_addons = f"{base}/custom-addons"
+    if Path(shared_addons).exists() and any(
+        p for p in Path(shared_addons).iterdir() if p.name != ".git"
+    ):
+        if ws_send:
+            await ws_send("Copying custom addons to instance...")
+        await run_cmd(f"rsync -a --exclude='.git' {shared_addons}/ {instance_addons}/", ws_send)
+        await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws_send)
 
     # Determine SMTP settings
     if env == "prod":
@@ -570,7 +619,7 @@ db_user = odoo
 db_password = False
 db_name = {db_name}
 dbfilter = ^{db_name}$
-addons_path = /opt/odoo/enterprise,/opt/odoo/odoo/addons,/opt/odoo/custom-addons
+addons_path = {base}/enterprise,{base}/odoo/addons,{instance_addons}
 data_dir = {data_dir}
 logfile = {log_dir}/{instance_name}.log
 log_level = info
@@ -599,7 +648,7 @@ After=network.target postgresql.service
 Type=simple
 User=odoo
 Group=odoo
-ExecStart=/opt/odoo/venv/bin/python3 /opt/odoo/odoo/odoo-bin -c {conf_path}
+ExecStart={base}/venv/bin/python3 {base}/odoo/odoo-bin -c {conf_path}
 Restart=always
 RestartSec=5
 
@@ -628,7 +677,7 @@ WantedBy=multi-user.target
             await ws_send("Initializing Odoo database (this may take a minute)...")
         await run_cmd(
             f'su - odoo -s /bin/bash -c "'
-            f'/opt/odoo/venv/bin/python3 /opt/odoo/odoo/odoo-bin '
+            f'{base}/venv/bin/python3 {base}/odoo/odoo-bin '
             f'-c {conf_path} -i base --stop-after-init"',
             ws_send,
         )
@@ -654,6 +703,7 @@ WantedBy=multi-user.target
     config["instances"][instance_name] = {
         "client": client,
         "env": env,
+        "version": version,
         "port": port,
         "workers": workers,
         "master_pw": master_pw,
@@ -694,6 +744,9 @@ async def delete_odoo_instance(instance_name: str, ws_send=None):
     if not instance:
         raise ValueError(f"Instance {instance_name} not found")
 
+    version = instance.get("version", "19")
+    base = odoo_base_dir(version)
+
     service = instance["service"]
     await run_cmd(f"systemctl stop {service}", ws_send)
     await run_cmd(f"systemctl disable {service}", ws_send)
@@ -709,7 +762,7 @@ async def delete_odoo_instance(instance_name: str, ws_send=None):
     )
 
     # Clean up data directory
-    data_dir = f"/opt/odoo/data/{instance_name}"
+    data_dir = f"{base}/data/{instance_name}"
     await run_cmd(f"rm -rf {data_dir}", ws_send)
 
     # Remove Nginx config
@@ -739,12 +792,18 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
     if not prod:
         raise ValueError(f"No prod instance found for client {client}")
 
+    target_version = target.get("version", "19")
+    prod_version = prod.get("version", "19")
+    if target_version != prod_version:
+        raise ValueError(f"Version mismatch: {instance_name} is v{target_version}, {prod_name} is v{prod_version}")
+
+    base = odoo_base_dir(target_version)
     target_db = target["db_name"]
     target_service = target["service"]
     target_conf = target["conf"]
     prod_db = prod["db_name"]
-    target_data_dir = f"/opt/odoo/data/{instance_name}"
-    prod_data_dir = f"/opt/odoo/data/{prod_name}"
+    target_data_dir = f"{base}/data/{instance_name}"
+    prod_data_dir = f"{base}/data/{prod_name}"
 
     # Stop target instance
     if ws_send:
@@ -791,11 +850,20 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
         if ws_send:
             await ws_send("No filestore to copy (prod filestore not found)")
 
+    # Copy custom addons from prod
+    prod_addons = f"{prod_data_dir}/addons"
+    target_addons = f"{target_data_dir}/addons"
+    if Path(prod_addons).exists():
+        if ws_send:
+            await ws_send("Copying custom addons from prod...")
+        await run_cmd(f"rsync -a --delete {prod_addons}/ {target_addons}/", ws_send)
+        await run_cmd(f"chown -R odoo:odoo {target_addons}", ws_send)
+
     # Neutralize the cloned database
     if ws_send:
         await ws_send("Running Odoo neutralize...")
     await run_cmd(
-        f"/opt/odoo/venv/bin/python3 /opt/odoo/odoo/odoo-bin "
+        f"{base}/venv/bin/python3 {base}/odoo/odoo-bin "
         f"-c {target_conf} --neutralize --stop-after-init",
         ws_send,
     )
@@ -809,16 +877,61 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
         await ws_send(f"Sync complete: {instance_name} now mirrors {prod_name}")
 
 
-# Step registry
+# ─── Step Dependency System ────────────────────────────────────────────────
+
+VERSION_STEPS = {"odoo_19", "odoo_18"}
+
+STEP_DEPS = {
+    "system_update": [],
+    "postgresql": ["system_update"],
+    "wkhtmltopdf": ["postgresql"],
+    "odoo_19": ["wkhtmltopdf"],
+    "odoo_18": ["wkhtmltopdf"],
+    "nginx": [("odoo_19", "odoo_18")],
+    "mailpit": ["nginx"],
+    "dns_check": ["mailpit"],
+    "ssl_certs": ["dns_check"],
+}
+
+STEP_ORDER = [
+    "system_update", "postgresql", "wkhtmltopdf",
+    "odoo_19", "odoo_18",
+    "nginx", "mailpit", "dns_check", "ssl_certs",
+]
+
 SETUP_STEPS = {
     "system_update": step_system_update,
     "postgresql": step_postgresql,
     "wkhtmltopdf": step_wkhtmltopdf,
-    "odoo_source": step_odoo_source,
+    "odoo_19": step_odoo_19,
+    "odoo_18": step_odoo_18,
     "nginx": step_nginx,
     "mailpit": step_mailpit,
     "dns_check": step_dns_check,
     "ssl_certs": step_ssl_certs,
 }
 
-STEP_ORDER = list(SETUP_STEPS.keys())
+
+def is_step_unlocked(step_id: str, config: dict) -> bool:
+    """Check if a step's dependencies are satisfied."""
+    deps = STEP_DEPS.get(step_id, [])
+    steps = config.get("setup_steps", {})
+    for dep in deps:
+        if isinstance(dep, tuple):
+            if not any(steps.get(d, {}).get("status") == "done" for d in dep):
+                return False
+        else:
+            if steps.get(dep, {}).get("status") != "done":
+                return False
+    return True
+
+
+def get_installed_versions(config: dict) -> list[str]:
+    """Return list of installed Odoo version strings (e.g. ['19', '18'])."""
+    versions = []
+    steps = config.get("setup_steps", {})
+    for vs in sorted(VERSION_STEPS, reverse=True):
+        ver = vs.replace("odoo_", "")
+        if steps.get(vs, {}).get("status") == "done":
+            versions.append(ver)
+    return versions

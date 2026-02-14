@@ -15,7 +15,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from config import load_config, save_config, PLATFORM_DIR
-from setup_steps import SETUP_STEPS, STEP_ORDER, create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd
+from setup_steps import (
+    SETUP_STEPS, STEP_ORDER, STEP_DEPS, VERSION_STEPS,
+    is_step_unlocked, get_installed_versions, odoo_base_dir,
+    create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd,
+)
 
 _public_ip_cache = None
 
@@ -48,6 +52,7 @@ templates = Jinja2Templates(directory="templates")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+
 def _static_url(path: str) -> str:
     """Return /static/path?v=<mtime> for cache-busting."""
     try:
@@ -62,12 +67,17 @@ templates.env.globals["static_url"] = _static_url
 # ─── Helper ─────────────────────────────────────────────────────────────────
 
 def is_setup_complete() -> bool:
-    """Check if all setup steps are done."""
+    """Check if all required setup steps are done (at least one version step)."""
     config = load_config()
-    return all(
-        step["status"] == "done"
-        for step in config["setup_steps"].values()
-    )
+    steps = config["setup_steps"]
+    if not any(steps.get(vs, {}).get("status") == "done" for vs in VERSION_STEPS):
+        return False
+    for step_id, step in steps.items():
+        if step_id in VERSION_STEPS:
+            continue
+        if step["status"] != "done":
+            return False
+    return True
 
 
 RESERVED_PORTS = {8025, 8080, 1025}
@@ -89,6 +99,14 @@ def get_next_port() -> int:
     return port
 
 
+def _step_deps_json() -> dict:
+    """Serialize STEP_DEPS for Jinja2/JSON (tuples -> lists)."""
+    return {
+        k: [list(d) if isinstance(d, tuple) else d for d in v]
+        for k, v in STEP_DEPS.items()
+    }
+
+
 # ─── Pages ───────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -108,6 +126,9 @@ async def setup_page(request: Request):
         "config": config,
         "steps": config["setup_steps"],
         "step_ids": STEP_ORDER,
+        "step_deps": _step_deps_json(),
+        "is_step_unlocked": is_step_unlocked,
+        "version_steps": VERSION_STEPS,
     })
 
 
@@ -158,6 +179,7 @@ async def instances_page(request: Request):
         "request": request,
         "config": config,
         "instances": instances,
+        "installed_versions": get_installed_versions(config),
     })
 
 
@@ -194,7 +216,10 @@ async def api_update_config(request: Request):
     """Update platform configuration."""
     data = await request.json()
     config = load_config()
-    config.update(data)
+    allowed_keys = {"domain", "github_token", "custom_addons_repos"}
+    for key in data:
+        if key in allowed_keys:
+            config[key] = data[key]
     save_config(config)
     return {"status": "ok", "config": config}
 
@@ -225,6 +250,7 @@ async def api_create_instance(request: Request):
     client = data.get("client")
     env = data.get("env", "dev")
     dev_name = data.get("dev_name", "")
+    version = data.get("version", "19")
     port = data.get("port", get_next_port())
     default_workers = {"prod": 4, "staging": 2}.get(env, 0)
     workers = int(data.get("workers", default_workers))
@@ -232,12 +258,17 @@ async def api_create_instance(request: Request):
     if not client:
         raise HTTPException(status_code=400, detail="client is required")
 
+    config = load_config()
+    installed = get_installed_versions(config)
+    if version not in installed:
+        raise HTTPException(status_code=400, detail=f"Odoo {version} is not installed")
+
     if env == "dev" and dev_name:
         actual_env = f"dev_{dev_name}"
     else:
         actual_env = env
 
-    await create_odoo_instance(client, actual_env, port, workers)
+    await create_odoo_instance(client, actual_env, port, workers, version=version)
     return {"status": "ok", "instance": f"{client}_{actual_env}", "port": port}
 
 
@@ -355,7 +386,7 @@ async def api_delete_database(db_name: str):
 
 @app.post("/api/deploy")
 async def api_deploy(request: Request):
-    """Deploy: git pull + module upgrade on an instance."""
+    """Deploy: git pull custom addons, copy to instance, restart."""
     data = await request.json()
     instance_name = data.get("instance")
     modules = data.get("modules", "all")
@@ -365,11 +396,32 @@ async def api_deploy(request: Request):
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
 
-    # Git pull custom addons
-    result = subprocess.run(
-        ["git", "-C", "/opt/odoo/custom-addons", "pull"],
-        capture_output=True, text=True, timeout=60
-    )
+    version = instance.get("version", "19")
+    base = odoo_base_dir(version)
+    shared_addons = f"{base}/custom-addons"
+    instance_addons = f"{base}/data/{instance_name}/addons"
+
+    # Git pull shared custom addons
+    git_output = ""
+    if Path(f"{shared_addons}/.git").exists():
+        result = subprocess.run(
+            ["git", "-C", shared_addons, "pull"],
+            capture_output=True, text=True, timeout=60
+        )
+        git_output = result.stdout
+    else:
+        git_output = "(no custom-addons repo configured)"
+
+    # Copy to instance addons dir
+    if Path(shared_addons).exists():
+        subprocess.run(
+            ["rsync", "-a", "--exclude=.git", f"{shared_addons}/", f"{instance_addons}/"],
+            capture_output=True, timeout=60
+        )
+        subprocess.run(
+            ["chown", "-R", "odoo:odoo", instance_addons],
+            capture_output=True, timeout=10
+        )
 
     # Restart the service to pick up changes
     service = instance["service"]
@@ -377,7 +429,7 @@ async def api_deploy(request: Request):
 
     return {
         "status": "ok",
-        "git_output": result.stdout,
+        "git_output": git_output,
         "instance": instance_name,
     }
 
@@ -418,6 +470,7 @@ async def ws_create_instance(websocket: WebSocket):
         client = data.get("client")
         env = data.get("env", "dev")
         dev_name = data.get("dev_name", "")
+        version = data.get("version", "19")
         port = data.get("port", get_next_port())
         default_workers = {"prod": 4, "staging": 2}.get(env, 0)
         workers = int(data.get("workers", default_workers))
@@ -431,7 +484,7 @@ async def ws_create_instance(websocket: WebSocket):
             await websocket.send_json({"type": "log", "message": message})
 
         await websocket.send_json({"type": "status", "status": "running"})
-        await create_odoo_instance(client, actual_env, port, workers, ws_send)
+        await create_odoo_instance(client, actual_env, port, workers, ws_send, version=version)
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})

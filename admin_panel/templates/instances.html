@@ -26,6 +26,14 @@
             <label for="new-dev-name">Developer:</label>
             <input type="text" id="new-dev-name" placeholder="samuel" pattern="[a-z]+(-[a-z]+)*" oninput="this.value=this.value.toLowerCase().replace(/[^a-z-]/g,'')">
         </div>
+        <div class="form-row">
+            <label for="new-version">Odoo Version:</label>
+            <select id="new-version">
+                {% for v in installed_versions %}
+                <option value="{{ v }}"{% if v == '19' %} selected{% endif %}>Odoo {{ v }}</option>
+                {% endfor %}
+            </select>
+        </div>
     </div>
     <button class="btn btn-primary" onclick="createInstance()">Create Instance</button>
     <div id="create-log" class="step-log" style="display:none;">
@@ -41,6 +49,7 @@
             <tr>
                 <th>Client</th>
                 <th>Env</th>
+                <th>Version</th>
                 <th>Port</th>
                 <th>Workers</th>
                 <th>Master PW</th>
@@ -56,6 +65,7 @@
             <tr id="row-{{ name }}">
                 <td><a href="https://{{ fqdn }}" target="_blank">{{ inst.client }}</a></td>
                 <td><a href="https://{{ fqdn }}" target="_blank"><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></a></td>
+                <td>{{ inst.version | default('19') }}</td>
                 <td><a href="https://{{ fqdn }}" target="_blank">{% if inst.workers | default(0) > 0 %}{{ inst.port }}/{{ inst.port + 1 }}{% else %}{{ inst.port }}{% endif %}</a></td>
                 <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}"></td>
                 <td><span class="pw-value" onclick="copyText(this)" title="Click to copy">{{ inst.master_pw | default('–') }}</span></td>
@@ -118,6 +128,7 @@ function createInstance() {
     const client = document.getElementById('new-client').value;
     const env = document.getElementById('new-env').value;
     const devName = document.getElementById('new-dev-name').value;
+    const version = document.getElementById('new-version').value;
 
     const nameRe = /^[a-z]+(-[a-z]+)*$/;
     if (!client || !nameRe.test(client)) { showToast('Client: lowercase letters and hyphens only', 'error'); return; }
@@ -126,11 +137,11 @@ function createInstance() {
     const logDiv = document.getElementById('create-log');
     connectWebSocket('/ws/instance/create', logDiv, {
         onOpen(ws) {
-            ws.send(JSON.stringify({client, env, dev_name: devName}));
+            ws.send(JSON.stringify({client, env, dev_name: devName, version}));
         },
         onStatus(status) {
             if (status === 'done') {
-                logDiv.querySelector('pre').textContent += '\n✓ Instance created!\n';
+                logDiv.querySelector('pre').textContent += '\nInstance created!\n';
                 showToast('Instance created');
                 setTimeout(() => location.reload(), 1500);
             }
@@ -149,7 +160,7 @@ function syncInstance(name) {
     connectWebSocket(`/ws/instance/sync/${name}`, logDiv, {
         onStatus(status) {
             if (status === 'done') {
-                logDiv.querySelector('pre').textContent += '\n✓ Sync complete!\n';
+                logDiv.querySelector('pre').textContent += '\nSync complete!\n';
                 showToast('Instance synced from prod');
             }
         },

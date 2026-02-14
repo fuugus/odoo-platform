@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Deploy</h1>
-    <p>Git Pull → Module Update → Service Restart</p>
+    <p>Git Pull → Copy to Instance → Service Restart</p>
 </div>
 
 <div class="card">
@@ -14,7 +14,7 @@
             <label for="deploy-instance">Instance:</label>
             <select id="deploy-instance">
                 {% for name, inst in config.get('instances', {}).items() %}
-                <option value="{{ name }}">{{ name }} ({{ inst.env }}, :{{ inst.port }})</option>
+                <option value="{{ name }}">{{ name }} (v{{ inst.version | default('19') }}, {{ inst.env }}, :{{ inst.port }})</option>
                 {% endfor %}
             </select>
         </div>
@@ -38,21 +38,21 @@
             <span class="workflow-num">1</span>
             <div>
                 <strong>Git Pull</strong>
-                <p>Pulls the latest changes from the custom-addons repository</p>
+                <p>Pulls latest from the version's custom-addons repository</p>
             </div>
         </div>
         <div class="workflow-step">
             <span class="workflow-num">2</span>
             <div>
-                <strong>Service Restart</strong>
-                <p>Restarts the Odoo instance so new modules are loaded</p>
+                <strong>Copy to Instance</strong>
+                <p>Syncs custom addons to the instance's own addons directory</p>
             </div>
         </div>
         <div class="workflow-step">
             <span class="workflow-num">3</span>
             <div>
-                <strong>Module Update</strong>
-                <p>Odoo automatically detects new or changed modules on startup</p>
+                <strong>Service Restart</strong>
+                <p>Restarts the Odoo instance so new modules are loaded</p>
             </div>
         </div>
     </div>
@@ -97,14 +97,14 @@ async function deploy() {
 
         if (resp.ok) {
             logPre.textContent += `\nGit Output:\n${data.git_output || '(no output)'}\n`;
-            logPre.textContent += `\n✓ Deploy successful! Instance ${data.instance} restarted.\n`;
+            logPre.textContent += `\nDeploy successful! Instance ${data.instance} restarted.\n`;
             showToast('Deploy successful');
         } else {
-            logPre.textContent += `\n✗ Error: ${data.detail}\n`;
+            logPre.textContent += `\nError: ${data.detail}\n`;
             showToast('Deploy failed', 'error');
         }
     } catch(e) {
-        logPre.textContent += `\n✗ Error: ${e.message}\n`;
+        logPre.textContent += `\nError: ${e.message}\n`;
         showToast('Deploy failed', 'error');
     }
 

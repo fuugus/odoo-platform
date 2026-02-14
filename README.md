@@ -1,30 +1,79 @@
 # Odoo Deployment Platform
 
-Self-hosted Odoo platform as a replacement for Odoo.sh.  
-One repo, one command, everything gets set up.
+Self-hosted Odoo.sh alternative. One repo, one server, multi-version Odoo 18/19 instance management.
 
-## Quick Start
+## Prerequisites
+
+- Fresh Ubuntu 24.04 server (e.g. Hetzner, DigitalOcean, AWS)
+- Root SSH access
+- A domain with wildcard DNS pointing to the server (e.g. `*.odoo.example.com`)
+
+## 1. Create SSH Key
+
+**Windows (PowerShell or Git Bash):**
+
+```powershell
+ssh-keygen -t ed25519 -C "your-email@example.com"
+cat ~/.ssh/id_ed25519.pub
+```
+
+**Linux / macOS:**
 
 ```bash
-# On a fresh Ubuntu 24.04 server:
+ssh-keygen -t ed25519 -C "your-email@example.com"
+cat ~/.ssh/id_ed25519.pub
+```
+
+Add the public key to your server's `~/.ssh/authorized_keys`:
+
+```bash
+ssh root@your-server-ip "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys" < ~/.ssh/id_ed25519.pub
+```
+
+## 2. Connect to Server
+
+SSH into the server with port forwarding so you can access the admin panel locally:
+
+```bash
+ssh -L 8080:localhost:8080 root@your-server-ip
+```
+
+This forwards port 8080 — you'll use `http://localhost:8080` to access the admin panel.
+
+## 3. Clone and Bootstrap
+
+```bash
 git clone https://github.com/fuugus/odoo-platform.git /root/odoo-platform
 cd /root/odoo-platform
 chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
-This installs Python dependencies and starts the **Admin Panel** as a systemd service on port 8080.
+The bootstrap script installs Python dependencies and starts the admin panel as a systemd service on port 8080.
 
-## Accessing the Admin Panel
+## 4. Install Claude Code (optional)
 
-**Via VS Code Remote SSH (recommended for development):**
-1. Connect to the server with VS Code Remote SSH
-2. Open the **Ports** tab (bottom panel, next to Terminal)
-3. Click **"Forward a Port"** and enter `8080`
-4. Open `http://127.0.0.1:8080` in your browser
+For AI-assisted server management:
 
-> **Note:** VS Code sometimes auto-detects the port, but if not, add it manually.
-> Alternatively, run `systemctl restart odoo-admin-panel` to trigger auto-detection.
+```bash
+npm install -g @anthropic-ai/claude-code
+cd /root/odoo-platform
+claude
+```
 
-**After Nginx setup (production):**
-- `http://admin.odoo.binaryone.ch`
+## 5. Access the Admin Panel
+
+Open `http://localhost:8080` in your browser (via the SSH tunnel from step 2).
+
+The Setup Wizard will guide you through:
+
+1. **System Update** — installs build tools and libraries
+2. **PostgreSQL 16** — database server
+3. **wkhtmltopdf** — PDF rendering for Odoo reports
+4. **Odoo 19 / Odoo 18 Source** — clone Community + Enterprise repos (at least one required)
+5. **Nginx** — reverse proxy for subdomains
+6. **Mailpit** — email catch-all for dev/staging
+7. **DNS Check** — verifies wildcard DNS
+8. **SSL Certificates** — Let's Encrypt for HTTPS
+
+After completing DNS and SSL setup, access the panel at `https://admin.your-domain.com`.

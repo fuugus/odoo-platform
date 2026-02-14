@@ -22,15 +22,29 @@
             2. Generate a classic token with <strong>repo</strong> scope at <a href="https://github.com/settings/tokens" target="_blank" style="color: var(--primary);">github.com/settings/tokens</a>
         </small>
     </div>
+    <div class="form-row">
+        <label for="custom_addons_19">Custom Addons Repo (v19):</label>
+        <input type="text" id="custom_addons_19" value="{{ config.get('custom_addons_repos', {}).get('19', '') }}" placeholder="https://github.com/user/custom-addons.git (optional)">
+    </div>
+    <div class="form-row">
+        <label for="custom_addons_18">Custom Addons Repo (v18):</label>
+        <input type="text" id="custom_addons_18" value="{{ config.get('custom_addons_repos', {}).get('18', '') }}" placeholder="https://github.com/user/custom-addons.git (optional)">
+    </div>
     <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
 </div>
 
 <div class="setup-steps">
-    {% set ns = namespace(all_prev_done=true) %}
     {% for step_id in step_ids %}
     {% set step = steps[step_id] %}
-    {% set locked = not ns.all_prev_done %}
-    <div class="step-card card {% if locked %}step-locked{% endif %}" id="step-{{ step_id }}" data-status="{{ step.status }}">
+    {% set locked = not is_step_unlocked(step_id, config) %}
+    {% set is_version = step_id in version_steps %}
+
+    {% if step_id == 'odoo_19' %}
+    <div class="version-steps-group">
+        <div class="version-steps-label">Install at least one Odoo version</div>
+    {% endif %}
+
+    <div class="step-card card {% if locked %}step-locked{% endif %}{% if is_version %} version-step{% endif %}" id="step-{{ step_id }}" data-status="{{ step.status }}">
         <div class="step-header">
             <div class="step-info">
                 <span class="step-status-icon">
@@ -62,39 +76,65 @@
             <pre></pre>
         </div>
     </div>
-    {% if step.status != 'done' %}{% set ns.all_prev_done = false %}{% endif %}
+
+    {% if step_id == 'odoo_18' %}
+    </div>
+    {% endif %}
+
     {% endfor %}
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+const STEP_DEPS = {{ step_deps | tojson }};
+
 async function saveConfig() {
     const domain = document.getElementById('domain').value;
     const github_token = document.getElementById('github_token').value;
+    const custom_addons_repos = {
+        "19": document.getElementById('custom_addons_19').value,
+        "18": document.getElementById('custom_addons_18').value,
+    };
     const resp = await fetch('/api/config', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({domain, github_token})
+        body: JSON.stringify({domain, github_token, custom_addons_repos})
     });
     if (resp.ok) {
         showToast('Configuration saved');
     }
 }
 
-function unlockNextStep(card) {
-    const next = card.nextElementSibling;
-    if (next && next.classList.contains('step-locked')) {
-        next.classList.remove('step-locked');
-        const btn = next.querySelector('button');
-        if (btn) {
-            btn.disabled = false;
-            if (btn.textContent.trim() === 'Run') {
-                const stepId = next.id.replace('step-', '');
-                btn.textContent = stepId === 'dns_check' ? 'Check' : 'Run';
+function unlockNextSteps(completedStepId) {
+    const cards = document.querySelectorAll('.step-card');
+    cards.forEach(card => {
+        const stepId = card.id.replace('step-', '');
+        const deps = STEP_DEPS[stepId] || [];
+        let allMet = true;
+        for (const dep of deps) {
+            if (Array.isArray(dep)) {
+                const anyDone = dep.some(d => {
+                    const c = document.getElementById('step-' + d);
+                    return c && c.dataset.status === 'done';
+                });
+                if (!anyDone) { allMet = false; break; }
+            } else {
+                const c = document.getElementById('step-' + dep);
+                if (!c || c.dataset.status !== 'done') { allMet = false; break; }
             }
         }
-    }
+        if (allMet && card.classList.contains('step-locked')) {
+            card.classList.remove('step-locked');
+            const btn = card.querySelector('button');
+            if (btn) {
+                btn.disabled = false;
+                if (btn.textContent.trim() === 'Run') {
+                    btn.textContent = stepId === 'dns_check' ? 'Check' : 'Run';
+                }
+            }
+        }
+    });
 }
 
 function runStep(stepId) {
@@ -119,7 +159,7 @@ function runStep(stepId) {
                 card.dataset.status = 'done';
                 card.classList.remove('step-locked');
                 desc.innerHTML = defaultDesc;
-                unlockNextStep(card);
+                unlockNextSteps(stepId);
             } else if (status === 'error') {
                 statusIcon.innerHTML = '<span class="icon icon-x"></span>';
                 btn.textContent = 'Retry';
