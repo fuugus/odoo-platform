@@ -848,8 +848,8 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
     if ws_send:
         await ws_send("Running Odoo neutralize...")
     await run_cmd(
-        f"{base}/venv/bin/python3 {base}/odoo/odoo-bin "
-        f"-c {target_conf} --neutralize --stop-after-init",
+        f"su - odoo -s /bin/bash -c \"{base}/venv/bin/python3 {base}/odoo/odoo-bin "
+        f"neutralize -d {target_db} -c {target_conf} --stop-after-init\"",
         ws_send,
     )
 
