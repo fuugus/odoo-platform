@@ -156,7 +156,7 @@ class DownloadController(http.Controller):
             'page_intro': 'Hier finden Sie wichtige Dokumente',
             'base_url': '/downloads',
         })
-        return request.render('website_kftheme.downloads_page', values)
+        return request.render('kaminfeger_website.downloads_page', values)
 
     @http.route(['/mitgliederbereich'], type='http', auth='public', website=True, sitemap=True)
     def mitgliederbereich(self, category=None, **kwargs):
@@ -167,7 +167,7 @@ class DownloadController(http.Controller):
             'page_intro': 'Interne Dokumente',
             'base_url': '/mitgliederbereich',
         })
-        return request.render('website_kftheme.downloads_page', values)
+        return request.render('kaminfeger_website.downloads_page', values)
 
 
 class KaminfegerverzeichnisController(http.Controller):
@@ -200,7 +200,7 @@ class KaminfegerverzeichnisController(http.Controller):
                 ('x_studio_ist_kaminfeger_unternehmen', '=', True)
             ], order='name asc')
 
-        return request.render('website_kftheme.kaminfeger_page', {
+        return request.render('kaminfeger_website.kaminfeger_page', {
             'states': states,
             'current_state': current_state,
             'companies': companies,
@@ -243,7 +243,7 @@ class PersonSearchController(http.Controller):
         abschluesse = request.env['x_abschluss'].sudo().search(
             [], order='x_studio_sequence asc')
 
-        return request.render('website_kftheme.feuko_page', {
+        return request.render('kaminfeger_website.feuko_page', {
             'partners': partners,
             'abschluesse': abschluesse,
             'search_params': post,

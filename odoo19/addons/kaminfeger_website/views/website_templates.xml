@@ -18,7 +18,7 @@
                 <div class="footer-wrapper container">
                     <div class="footer-container">
                         <div class="footer-left">
-                            <img src="/website_kftheme/static/src/img/content/footer-logo.png" alt="Kaminfeger Logo" class="footer-logo"/>
+                            <img src="/kaminfeger_website/static/src/img/content/footer-logo.png" alt="Kaminfeger Logo" class="footer-logo"/>
                             <div class="social-links">
                                 <a href="https://www.instagram.com/kaminfegerverband/" target="_blank" class="social-link">
                                     <i class="fa fa-instagram"></i>

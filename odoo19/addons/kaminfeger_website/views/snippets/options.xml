@@ -4,72 +4,72 @@
 
     <!-- Create the snippets group -->
     <xpath expr="//snippets[@id='snippet_groups']/*[1]" position="before">
-        <t snippet-group="kaminfeger" t-snippet="website.s_snippet_group" string="Kaminfeger" t-thumbnail="/website_kftheme/static/src/img/wbuilder/s_kftheme_group_thumbnail.png"/>
+        <t snippet-group="kaminfeger" t-snippet="website.s_snippet_group" string="Kaminfeger" t-thumbnail="/kaminfeger_website/static/src/img/wbuilder/s_kftheme_group_thumbnail.png"/>
     </xpath>
 
     <!-- Add the custom snippets to the group -->
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfteam" string="Kaminfeger Team" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfteam" string="Kaminfeger Team" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfnews" string="Kaminfeger News" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfnews" string="Kaminfeger News" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfkontakt" string="Kaminfeger Kontakt" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfkontakt" string="Kaminfeger Kontakt" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfdoubleblockaccordion" string="Kaminfeger Doppelblock Akkordeon" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfdoubleblockaccordion" string="Kaminfeger Doppelblock Akkordeon" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfdoubleblock3" string="Kaminfeger Doppelblock 3" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfdoubleblock3" string="Kaminfeger Doppelblock 3" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfdoubleblock2" string="Kaminfeger Doppelblock 2" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfdoubleblock2" string="Kaminfeger Doppelblock 2" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfdoubleblock1" string="Kaminfeger Doppelblock 1" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfdoubleblock1" string="Kaminfeger Doppelblock 1" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfbenefits" string="Kaminfeger Vorteile" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfbenefits" string="Kaminfeger Vorteile" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfsimpleintro" string="Kaminfeger Simples Intro" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfsimpleintro" string="Kaminfeger Simples Intro" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_snippet_kfintro" string="Kaminfeger Intro" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_snippet_kfintro" string="Kaminfeger Intro" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>
 
     <xpath expr="//snippets[@id='snippet_structure']/*[1]" position="before">
-        <t t-snippet="website_kftheme.s_person_search_form" string="Kaminfeger Feuko Suche" group="kaminfeger">
+        <t t-snippet="kaminfeger_website.s_person_search_form" string="Kaminfeger Feuko Suche" group="kaminfeger">
             <keywords>Snippet</keywords>
         </t>
     </xpath>

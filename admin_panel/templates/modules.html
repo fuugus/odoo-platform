@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Modules - Odoo Platform{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Modules</h1>
+    <p>Custom addons, Studio Bridge export/revert, and module operations</p>
+</div>
+
+{% for ver, addons in custom_addons.items() %}
+<div class="card">
+    <h3>Custom Addons — Odoo {{ ver }}</h3>
+    {% if addons %}
+    <table class="data-table">
+        <thead>
+            <tr><th>Module</th><th>Name</th><th>Version</th><th>Summary</th></tr>
+        </thead>
+        <tbody>
+        {% for addon in addons %}
+            <tr>
+                <td><code>{{ addon.name }}</code></td>
+                <td>{{ addon.display_name }}</td>
+                <td>{{ addon.version }}</td>
+                <td>{{ addon.summary }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No custom addons found</p>
+    {% endif %}
+</div>
+{% endfor %}
+
+{% if not custom_addons %}
+<div class="card">
+    <h3>Custom Addons</h3>
+    <p class="empty-state">No custom addons directories found</p>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Studio Bridge</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+        Export Studio customizations into a proper Odoo module, or revert module fields back to Studio state before a major upgrade.
+    </p>
+    <div class="form-grid">
+        <div class="form-row">
+            <label for="bridge-instance">Instance</label>
+            <select id="bridge-instance">
+                <option value="">Select instance...</option>
+                {% for name, inst in instances.items() %}
+                <option value="{{ name }}" data-version="{{ inst.version | default('19') }}" data-client="{{ inst.client }}" data-db="{{ inst.db_name }}">{{ name }} (v{{ inst.version | default('19') }}, {{ inst.env }})</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" id="btn-export" onclick="startExport()">Export Studio → Module</button>
+        <button class="btn btn-danger" id="btn-revert" onclick="startRevert()">Prepare for Upgrade</button>
+    </div>
+    <div class="step-log" id="bridge-log" style="display:none;margin-top:14px;">
+        <pre></pre>
+    </div>
+</div>
+
+<div class="card no-border">
+    <h3>Module Operations</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+        Install or upgrade a module on an instance via odoo-bin with --stop-after-init.
+    </p>
+    <div class="form-grid">
+        <div class="form-row">
+            <label for="op-instance">Instance</label>
+            <select id="op-instance">
+                <option value="">Select instance...</option>
+                {% for name, inst in instances.items() %}
+                <option value="{{ name }}">{{ name }} (v{{ inst.version | default('19') }}, {{ inst.env }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="op-module">Module Name</label>
+            <input type="text" id="op-module" placeholder="e.g. kaminfeger_base">
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" id="btn-install" onclick="startModuleOp('install')">Install Module</button>
+        <button class="btn btn-secondary" id="btn-upgrade" onclick="startModuleOp('upgrade')">Upgrade Module</button>
+    </div>
+    <div class="step-log" id="op-log" style="display:none;margin-top:14px;">
+        <pre></pre>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function getSelectedBridge() {
+    const sel = document.getElementById('bridge-instance');
+    const opt = sel.options[sel.selectedIndex];
+    if (!sel.value) return null;
+    return {
+        instance: sel.value,
+        version: opt.dataset.version,
+        client: opt.dataset.client,
+        db_name: opt.dataset.db,
+    };
+}
+
+function setBridgeButtons(disabled) {
+    document.getElementById('btn-export').disabled = disabled;
+    document.getElementById('btn-revert').disabled = disabled;
+}
+
+function startExport() {
+    const info = getSelectedBridge();
+    if (!info) { showToast('Select an instance', 'error'); return; }
+
+    setBridgeButtons(true);
+    const logEl = document.getElementById('bridge-log');
+
+    connectWebSocket('/ws/modules/export', logEl, {
+        onOpen(ws) {
+            ws.send(JSON.stringify({
+                db_name: info.db_name,
+                client: info.client,
+                version: info.version,
+            }));
+        },
+        onStatus(status) {
+            if (status === 'done') showToast('Export complete', 'success');
+            if (status === 'error') showToast('Export failed', 'error');
+        },
+        onClose() {
+            setBridgeButtons(false);
+        }
+    });
+}
+
+function startRevert() {
+    const info = getSelectedBridge();
+    if (!info) { showToast('Select an instance', 'error'); return; }
+
+    if (!confirm('This will revert all module-owned fields back to Studio state. Continue?')) return;
+
+    setBridgeButtons(true);
+    const logEl = document.getElementById('bridge-log');
+
+    connectWebSocket('/ws/modules/prepare-upgrade', logEl, {
+        onOpen(ws) {
+            ws.send(JSON.stringify({
+                db_name: info.db_name,
+                client: info.client,
+            }));
+        },
+        onStatus(status) {
+            if (status === 'done') showToast('Revert complete', 'success');
+            if (status === 'error') showToast('Revert failed', 'error');
+        },
+        onClose() {
+            setBridgeButtons(false);
+        }
+    });
+}
+
+function setOpButtons(disabled) {
+    document.getElementById('btn-install').disabled = disabled;
+    document.getElementById('btn-upgrade').disabled = disabled;
+}
+
+function startModuleOp(operation) {
+    const instance = document.getElementById('op-instance').value;
+    const moduleName = document.getElementById('op-module').value.trim();
+    if (!instance) { showToast('Select an instance', 'error'); return; }
+    if (!moduleName) { showToast('Enter a module name', 'error'); return; }
+
+    setOpButtons(true);
+    const logEl = document.getElementById('op-log');
+
+    connectWebSocket('/ws/modules/operation', logEl, {
+        onOpen(ws) {
+            ws.send(JSON.stringify({
+                instance_name: instance,
+                module_name: moduleName,
+                operation: operation,
+            }));
+        },
+        onStatus(status) {
+            const label = operation === 'install' ? 'Install' : 'Upgrade';
+            if (status === 'done') showToast(`${label} complete`, 'success');
+            if (status === 'error') showToast(`${label} failed`, 'error');
+        },
+        onClose() {
+            setOpButtons(false);
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -4,7 +4,7 @@
     <template id="s_snippet_kfintro" name="Kaminfeger Intro Snippet">
         <section class="s_snippet_kfintro">
             <div class="kfintro s_cover parallax s_parallax_is_fixed o_cc o_cc5 pt232 pb232" data-scroll-background-ratio="1">
-                <span class="s_parallax_bg oe_img_bg" style="background-image: url('/website_kftheme/static/src/img/content/intro.jpg'); background-position: 50% 75%;"/>
+                <span class="s_parallax_bg oe_img_bg" style="background-image: url('/kaminfeger_website/static/src/img/content/intro.jpg'); background-position: 50% 75%;"/>
                 <div class="kfintro-filter"/>
                 <div class="container s_allow_columns">
                     <h1 class="display-3" style="text-align: left;">Kaminfeger Schweiz</h1>

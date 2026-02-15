@@ -2,8 +2,8 @@
 <odoo noupdate="1">
    <record id="website.default_website" model="website">
       <field name="name">Kaminfeger Schweiz</field>
-      <field name="logo" type="base64" file="website_kftheme/static/src/img/content/logo.png"/>
-      <field name="favicon" type="base64" file="website_kftheme/static/description/favicon.png" />
+      <field name="logo" type="base64" file="kaminfeger_website/static/src/img/content/logo.png"/>
+      <field name="favicon" type="base64" file="kaminfeger_website/static/description/favicon.png" />
       <field name="cookies_bar" eval="True" />
       <field name="social_facebook">https://www.facebook.com/kaminfegerschweiz</field>
       <field name="social_instagram">https://www.instagram.com/kaminfegerschweiz</field>

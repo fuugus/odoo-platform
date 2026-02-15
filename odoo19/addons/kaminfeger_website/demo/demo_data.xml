@@ -3,7 +3,7 @@
     <!-- TOP Menu Items -->
     <record id="my_submenu_1" model="website.menu">
         <field name="name">Kontakt</field>
-        <field name="parent_id" ref="website_kftheme.my_header_menu"/>
+        <field name="parent_id" ref="kaminfeger_website.my_header_menu"/>
         <field name="url">/kontakt</field>
         <field name="sequence" eval="10"/>
         <field name="website_id" ref="website.default_website"/>
@@ -11,7 +11,7 @@
 
     <record id="my_submenu_2" model="website.menu">
         <field name="name">Shop</field>
-        <field name="parent_id" ref="website_kftheme.my_header_menu"/>
+        <field name="parent_id" ref="kaminfeger_website.my_header_menu"/>
         <field name="url">/shop</field>
         <field name="sequence" eval="20"/>
         <field name="website_id" ref="website.default_website"/>
@@ -19,7 +19,7 @@
 
     <record id="my_submenu_3" model="website.menu">
         <field name="name">Kurse</field>
-        <field name="parent_id" ref="website_kftheme.my_header_menu"/>
+        <field name="parent_id" ref="kaminfeger_website.my_header_menu"/>
         <field name="url">/kurse</field>
         <field name="sequence" eval="30"/>
         <field name="website_id" ref="website.default_website"/>
@@ -27,7 +27,7 @@
 
     <record id="my_submenu_4" model="website.menu">
         <field name="name">Login</field>
-        <field name="parent_id" ref="website_kftheme.my_header_menu"/>
+        <field name="parent_id" ref="kaminfeger_website.my_header_menu"/>
         <field name="url">/login</field>
         <field name="sequence" eval="40"/>
         <field name="website_id" ref="website.default_website"/>
@@ -36,7 +36,7 @@
 
     <record id="my_submenu_5" model="website.menu">
         <field name="name">E-Learning Platform</field>
-        <field name="parent_id" ref="website_kftheme.my_header_menu"/>
+        <field name="parent_id" ref="kaminfeger_website.my_header_menu"/>
         <field name="url">/e-learning-platform</field>
         <field name="sequence" eval="40"/>
         <field name="website_id" ref="website.default_website"/>

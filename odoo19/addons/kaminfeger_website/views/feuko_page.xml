@@ -3,7 +3,7 @@
     <template id="feuko_page" name="Suchergebnisse">
         <t t-call="website.layout">
 
-            <t t-call="website_kftheme.s_person_search_form"/>
+            <t t-call="kaminfeger_website.s_person_search_form"/>
 
             <div class="container mb-5 mt-5">
                 <h3>Suchergebnisse</h3>

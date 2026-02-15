@@ -25,6 +25,10 @@ from setup_steps import (
     is_step_unlocked, get_installed_versions, odoo_base_dir,
     create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd,
 )
+from studio_bridge import (
+    get_custom_addons_info, export_studio_to_module,
+    convert_module_to_studio, install_or_upgrade_module,
+)
 
 _public_ip_cache = None
 
@@ -306,6 +310,22 @@ async def databases_page(request: Request):
     return templates.TemplateResponse("databases.html", {
         "request": request,
         "config": config,
+        "user": get_current_user(request),
+    })
+
+
+@app.get("/modules", response_class=HTMLResponse)
+async def modules_page(request: Request):
+    """Modules management page."""
+    config = load_config()
+    instances = {}
+    for name, inst in config.get("instances", {}).items():
+        instances[name] = inst
+    return templates.TemplateResponse("modules.html", {
+        "request": request,
+        "config": config,
+        "instances": instances,
+        "custom_addons": get_custom_addons_info(config),
         "user": get_current_user(request),
     })
 
@@ -628,6 +648,108 @@ async def ws_sync_instance(websocket: WebSocket, instance_name: str):
 
         await websocket.send_json({"type": "status", "status": "running"})
         await sync_instance_from_prod(instance_name, ws_send)
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
+    finally:
+        await websocket.close()
+
+
+# ─── WebSocket for Modules ───────────────────────────────────────────────────
+
+@app.websocket("/ws/modules/export")
+async def ws_modules_export(websocket: WebSocket):
+    """WebSocket endpoint for exporting Studio customizations to a module."""
+    await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
+    try:
+        data = await websocket.receive_json()
+        db_name = data.get("db_name")
+        client = data.get("client")
+        version = data.get("version", "19")
+
+        if not db_name or not client:
+            raise ValueError("db_name and client are required")
+
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await export_studio_to_module(db_name, client, version, ws_send)
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
+    finally:
+        await websocket.close()
+
+
+@app.websocket("/ws/modules/prepare-upgrade")
+async def ws_modules_prepare_upgrade(websocket: WebSocket):
+    """WebSocket endpoint for reverting module fields back to Studio state."""
+    await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
+    try:
+        data = await websocket.receive_json()
+        db_name = data.get("db_name")
+        client = data.get("client")
+
+        if not db_name or not client:
+            raise ValueError("db_name and client are required")
+
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await convert_module_to_studio(db_name, client, ws_send)
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
+    finally:
+        await websocket.close()
+
+
+@app.websocket("/ws/modules/operation")
+async def ws_modules_operation(websocket: WebSocket):
+    """WebSocket endpoint for installing or upgrading a module on an instance."""
+    await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
+    try:
+        data = await websocket.receive_json()
+        instance_name = data.get("instance_name")
+        module_name = data.get("module_name")
+        operation = data.get("operation", "install")
+
+        if not instance_name or not module_name:
+            raise ValueError("instance_name and module_name are required")
+        if operation not in ("install", "upgrade"):
+            raise ValueError("operation must be 'install' or 'upgrade'")
+
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await install_or_upgrade_module(instance_name, module_name, operation, ws_send)
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})

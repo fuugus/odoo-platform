@@ -1,6 +1,6 @@
 {
-    'name': 'KF Theme',
-    'description': 'Theme for Kaminfeger Schweiz',
+    'name': 'Kaminfeger Website',
+    'description': 'Website theme and pages for Kaminfeger Schweiz',
     'version': '1.0.0',
     'author': 'BINARY one GmbH',
     'category': 'Website/Theme',
@@ -12,6 +12,7 @@
         'website_event',
         'hr',
         'website_hr_recruitment',
+        'kaminfeger_base',
     ],
     'data': [
         'data/website.xml',
@@ -50,23 +51,23 @@
     ],
     'assets': {
         'web._assets_primary_variables': [
-            'website_kftheme/static/src/scss/primary_variables.scss',
+            'kaminfeger_website/static/src/scss/primary_variables.scss',
         ],
         'web.assets_frontend': [
-            'website_kftheme/static/src/scss/theme.scss',
-            'website_kftheme/static/src/js/theme.js',
+            'kaminfeger_website/static/src/scss/theme.scss',
+            'kaminfeger_website/static/src/js/theme.js',
 
-            'website_kftheme/static/src/scss/snippets/kfintro.scss',
-            'website_kftheme/static/src/scss/snippets/kfsimpleintro.scss',
-            'website_kftheme/static/src/scss/snippets/kfdoubleblock.scss',
-            'website_kftheme/static/src/scss/snippets/kfbenefits.scss',
-            'website_kftheme/static/src/scss/snippets/kfnews.scss',
-            'website_kftheme/static/src/scss/snippets/kfteam.scss',
-            'website_kftheme/static/src/scss/snippets/kfkontakt.scss',
-            'website_kftheme/static/src/scss/snippets/accordion.scss',
+            'kaminfeger_website/static/src/scss/snippets/kfintro.scss',
+            'kaminfeger_website/static/src/scss/snippets/kfsimpleintro.scss',
+            'kaminfeger_website/static/src/scss/snippets/kfdoubleblock.scss',
+            'kaminfeger_website/static/src/scss/snippets/kfbenefits.scss',
+            'kaminfeger_website/static/src/scss/snippets/kfnews.scss',
+            'kaminfeger_website/static/src/scss/snippets/kfteam.scss',
+            'kaminfeger_website/static/src/scss/snippets/kfkontakt.scss',
+            'kaminfeger_website/static/src/scss/snippets/accordion.scss',
         ],
         'website.assets_editor': [
-            'website_kftheme/static/src/website_builder/footer_option.xml',
+            'kaminfeger_website/static/src/website_builder/footer_option.xml',
         ],
     },
     'license': 'LGPL-3',
