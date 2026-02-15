@@ -150,7 +150,6 @@ async def step_odoo_version(version: str, ws_send=None):
         base = odoo_base_dir(version)
         odoo_src = f"{base}/odoo"
         enterprise_src = f"{base}/enterprise"
-        custom_addons = f"{base}/custom-addons"
         venv_dir = f"{base}/venv"
 
         community_url = "https://github.com/odoo/odoo.git"
@@ -172,7 +171,7 @@ async def step_odoo_version(version: str, ws_send=None):
         )
 
         # Create directories
-        await run_cmd(f"mkdir -p {odoo_src} {enterprise_src} {custom_addons} {base}/data", ws_send)
+        await run_cmd(f"mkdir -p {odoo_src} {enterprise_src} {base}/data", ws_send)
 
         # Clone Odoo Community
         if ws_send:
@@ -199,18 +198,6 @@ async def step_odoo_version(version: str, ws_send=None):
             await run_cmd(f"cd {enterprise_src} && git pull", ws_send)
             if ws_send:
                 await ws_send("Enterprise already cloned, pulled latest")
-
-        # Clone custom addons repo (optional)
-        addons_repo = config.get("custom_addons_repos", {}).get(version, "")
-        if addons_repo:
-            if ws_send:
-                await ws_send(f"Cloning custom addons for v{version}...")
-            if not Path(f"{custom_addons}/.git").exists():
-                await run_cmd(f"git clone {addons_repo} {custom_addons}", ws_send)
-            else:
-                await run_cmd(f"cd {custom_addons} && git pull", ws_send)
-                if ws_send:
-                    await ws_send("Custom addons already cloned, pulled latest")
 
         # Create venv and install deps
         if not Path(venv_dir).exists():
@@ -592,14 +579,12 @@ async def create_odoo_instance(client: str, env: str, port: int, workers: int = 
     await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir} {instance_addons}", ws_send)
     await run_cmd(f"chown odoo:odoo {data_dir} {log_dir}", ws_send)
 
-    # Copy custom addons to per-instance dir
-    shared_addons = f"{base}/custom-addons"
-    if Path(shared_addons).exists() and any(
-        p for p in Path(shared_addons).iterdir() if p.name != ".git"
-    ):
+    # Copy custom addons from repo to instance
+    repo_addons = PLATFORM_DIR / f"odoo{version}" / "addons"
+    if repo_addons.exists() and any(p for p in repo_addons.iterdir() if p.name != ".gitkeep"):
         if ws_send:
             await ws_send("Copying custom addons to instance...")
-        await run_cmd(f"rsync -a --exclude='.git' {shared_addons}/ {instance_addons}/", ws_send)
+        await run_cmd(f"rsync -a --exclude='.git' --exclude='.gitkeep' {repo_addons}/ {instance_addons}/", ws_send)
         await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws_send)
 
     # Determine SMTP settings

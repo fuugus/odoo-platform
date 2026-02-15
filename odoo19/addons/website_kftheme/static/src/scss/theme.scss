@@ -1,0 +1,56 @@
+html * {
+    font-family: 'bahnschrift', sans-serif;
+}
+
+main {
+    background-color: #ffffff;
+}
+
+.btn {
+    &.btn-primary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        background-color: o-color('o-color-1') !important;
+        color: o-color('o-color-3') !important;
+        border-radius: 8px;
+        padding: 10px 22px;
+        text-decoration: none;
+
+        &:hover {
+            background-color: darken(o-color('o-color-1'), 10%) !important;
+            color: o-color('o-color-3') !important;
+        }
+    }
+
+    &.btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        background-color: #ffffff !important;
+        color: o-color('o-color-1') !important;
+        border: 1px solid o-color('o-color-1') !important;
+        border-radius: 8px;
+        padding: 10px 22px;
+        text-decoration: none;
+
+        &:hover {
+            background-color: o-color('o-color-1') !important;
+            color: o-color('o-color-3') !important;
+        }
+    }
+}
+
+@media (min-width: 1800px) {
+    .container {
+        max-width: 1600px;
+    }
+}
+
+@media (min-width: 2000px) {
+    .container {
+        max-width: 1800px;
+    }
+}

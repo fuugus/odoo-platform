@@ -18,10 +18,6 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="form-row">
-            <label for="deploy-modules">Modules:</label>
-            <input type="text" id="deploy-modules" placeholder="all (or comma-separated: sale,purchase)" value="all">
-        </div>
     </div>
     <button class="btn btn-primary" onclick="deploy()" id="deploy-btn">Start Deploy</button>
 </div>
@@ -75,7 +71,6 @@
 <script>
 async function deploy() {
     const instance = document.getElementById('deploy-instance').value;
-    const modules = document.getElementById('deploy-modules').value;
     const btn = document.getElementById('deploy-btn');
     const outputDiv = document.getElementById('deploy-output');
     const logPre = document.getElementById('deploy-log');
@@ -91,7 +86,7 @@ async function deploy() {
         const resp = await fetch('/api/deploy', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({instance, modules})
+            body: JSON.stringify({instance})
         });
         const data = await resp.json();
 

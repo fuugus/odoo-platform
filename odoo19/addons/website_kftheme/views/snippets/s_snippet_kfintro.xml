@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="s_snippet_kfintro" name="Kaminfeger Intro Snippet">
+        <section class="s_snippet_kfintro">
+            <div class="kfintro s_cover parallax s_parallax_is_fixed o_cc o_cc5 pt232 pb232" data-scroll-background-ratio="1">
+                <span class="s_parallax_bg oe_img_bg" style="background-image: url('/website_kftheme/static/src/img/content/intro.jpg'); background-position: 50% 75%;"/>
+                <div class="kfintro-filter"/>
+                <div class="container s_allow_columns">
+                    <h1 class="display-3" style="text-align: left;">Kaminfeger Schweiz</h1>
+                    <p class="lead" style="text-align: left;">Willkommen bei Kaminfeger Schweiz, Ihrem nationalen Verband für Kaminfeger.</p>
+                </div>
+            </div>
+            <div class="intro-grid-wrapper">
+                <div class="intro-grid container">
+                    <div>
+                        <h2>Stelleninserate</h2>
+                        <p>Intro Text für die Stelleninserate</p>
+                        <a href="#">
+                            Mehr erfahren
+                            <svg fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                        </a>
+                    </div>
+                    <div>
+                        <h2>Kaminfeger-Verzeichnis</h2>
+                        <p>Intro Text fürs Kaminfeger-Verzeichnis</p>
+                        <a href="#">
+                            Mehr erfahren
+                            <svg fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                        </a>
+                    </div>
+                    <div>
+                        <h2>Sonderangebote</h2>
+                        <p>Intro Text für die Sonderangebote </p>
+                        <a href="#">
+                            Mehr erfahren
+                            <svg fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                        </a>
+                    </div>
+                    <div>
+                        <h2>E-Learning Plattform</h2>
+                        <p>Intro Text für die E-Learning Plattform</p>
+                        <a href="#">
+                            Mehr erfahren
+                            <svg fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                        </a>
+                    </div>
+                </div>
+            </div> 
+        </section>
+    </template>
+
+</odoo>

@@ -52,8 +52,8 @@
                 <th>Version</th>
                 <th>Port</th>
                 <th>Workers</th>
-                <th>Master PW</th>
-                <th>Admin PW</th>
+                <th>Master PW &rsaquo; DB</th>
+                <th>Admin PW &rsaquo; Odoo</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -68,8 +68,8 @@
                 <td>{{ inst.version | default('19') }}</td>
                 <td><a href="https://{{ fqdn }}" target="_blank">{% if inst.workers | default(0) > 0 %}{{ inst.port }}/{{ inst.port + 1 }}{% else %}{{ inst.port }}{% endif %}</a></td>
                 <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}"></td>
-                <td><span class="pw-value" onclick="copyText(this)" title="Click to copy">{{ inst.master_pw | default('–') }}</span></td>
-                <td><span class="pw-value" onclick="copyText(this)" title="Click to copy">{{ inst.admin_pw | default('–') }}</span></td>
+                <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/database/manager')" title="Copy PW & open DB manager">{{ inst.master_pw | default('–') }}</span></td>
+                <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/login')" title="Copy PW & open Odoo">{{ inst.admin_pw | default('–') }}</span></td>
                 <td id="status-{{ name }}">
                     <a href="https://{{ fqdn }}" target="_blank">
                         <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
@@ -225,6 +225,12 @@ async function updateWorkers(name, value) {
 function copyText(el) {
     navigator.clipboard.writeText(el.textContent);
     showToast('Copied');
+}
+
+function copyAndOpen(el, url) {
+    navigator.clipboard.writeText(el.textContent);
+    showToast('Copied');
+    window.open(url, '_blank');
 }
 
 function updateStatusUI(name, status) {

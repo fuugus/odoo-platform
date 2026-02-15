@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="add_to_head" inherit_id="web.layout" name="Add Custom Line to Head">
+        <xpath expr="//head" position="inside">
+            <link rel="stylesheet" href="https://use.typekit.net/ujf6dzk.css" />
+            <script src="https://kit.fontawesome.com/d7aa5d110b.js" crossorigin="anonymous"></script>
+
+            <script src="https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/js/splide.min.js"></script>
+            <link href="https://cdn.jsdelivr.net/npm/@splidejs/splide@4.1.4/dist/css/splide.min.css" rel="stylesheet" />
+
+            <script>
+
+                document.addEventListener( 'DOMContentLoaded', function() {
+                    var list = document.getElementsByClassName("splide-team");
+                    for (let item of list) {
+                        new Splide(
+                            item,
+                            {
+                                type: 'loop',
+                                autoplay: true,
+                                interval: 3000,
+                                perPage: 4,
+                                perMove: 1,
+                                easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+                                arrows: true,
+                                gap: '32px',
+                                breakpoints: {
+                                    1200: {
+                                        perPage: 3,
+                                    },
+                                    800: {
+                                        perPage: 2,
+                                    },
+                                    600: {
+                                        perPage: 1,
+                                    }
+                                }
+                            }
+                        ).mount();
+                    }
+
+                    var listNews = document.getElementsByClassName("splide-news");
+                    for (let newsItem of listNews) {
+                        new Splide(
+                            newsItem,
+                            {
+                                type: 'loop',
+                                autoplay: true,
+                                interval: 3000,
+                                perPage: 3,
+                                perMove: 1,
+                                easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+                                arrows: true,
+                                gap: '32px',
+                                breakpoints: {
+                                    1200: {
+                                        perPage: 3,
+                                    },
+                                    800: {
+                                        perPage: 2,
+                                    },
+                                    600: {
+                                        perPage: 1,
+                                    }
+                                }
+                            }
+                        ).mount();
+                    }
+                });
+
+            </script>
+
+        </xpath>
+    </template>
+</odoo>

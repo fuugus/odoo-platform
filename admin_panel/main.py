@@ -216,7 +216,7 @@ async def api_update_config(request: Request):
     """Update platform configuration."""
     data = await request.json()
     config = load_config()
-    allowed_keys = {"domain", "github_token", "custom_addons_repos"}
+    allowed_keys = {"domain", "github_token"}
     for key in data:
         if key in allowed_keys:
             config[key] = data[key]
@@ -398,30 +398,24 @@ async def api_deploy(request: Request):
 
     version = instance.get("version", "19")
     base = odoo_base_dir(version)
-    shared_addons = f"{base}/custom-addons"
+    repo_addons = Path(PLATFORM_DIR) / f"odoo{version}" / "addons"
     instance_addons = f"{base}/data/{instance_name}/addons"
 
-    # Git pull shared custom addons
+    # Sync custom addons from repo to instance
     git_output = ""
-    if Path(f"{shared_addons}/.git").exists():
-        result = subprocess.run(
-            ["git", "-C", shared_addons, "pull"],
-            capture_output=True, text=True, timeout=60
-        )
-        git_output = result.stdout
-    else:
-        git_output = "(no custom-addons repo configured)"
-
-    # Copy to instance addons dir
-    if Path(shared_addons).exists():
+    if repo_addons.exists() and any(p for p in repo_addons.iterdir() if p.name != ".gitkeep"):
         subprocess.run(
-            ["rsync", "-a", "--exclude=.git", f"{shared_addons}/", f"{instance_addons}/"],
+            ["rsync", "-a", "--exclude=.git", "--exclude=.gitkeep", f"{repo_addons}/", f"{instance_addons}/"],
             capture_output=True, timeout=60
         )
         subprocess.run(
             ["chown", "-R", "odoo:odoo", instance_addons],
             capture_output=True, timeout=10
         )
+        addons_list = [p.name for p in repo_addons.iterdir() if p.is_dir() and p.name != ".git"]
+        git_output = f"Synced {len(addons_list)} module(s): {', '.join(addons_list)}"
+    else:
+        git_output = "(no custom addons found)"
 
     # Restart the service to pick up changes
     service = instance["service"]

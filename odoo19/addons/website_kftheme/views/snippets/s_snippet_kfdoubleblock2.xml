@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="s_snippet_kfdoubleblock2" name="Kaminfeger Doppelblock 2 Snippet">
+        <section class="s_snippet_kfdoubleblock2">
+            <div class="kfdoubleblock-wrapper">
+                <div class="kfdoubleblock container">
+                    <div class="kfdoubleblock-grid">
+                        <img class="w-full block" src="/website_kftheme/static/src/img/content/doubleblock2.png" alt="dashboard image" />
+                        <div>
+                            <h2>Finde den passenden Kaminfeger in deiner Nähe</h2>
+                            <p>
+                                Egal ob du einen Kaminfeger für eine Inspektion, Reinigung oder Beratung benötigst, unser Verzeichnis hilft dir, den richtigen Fachmann in deiner Nähe zu finden. <br />
+                                Durchsuche unser Verzeichnis und finde den Kaminfeger, der am besten zu deinen Bedürfnissen passt.
+                            </p>
+                            <a href="#" class="btn btn-primary">
+                                Kaminfeger-Verzeichnis
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+</odoo>

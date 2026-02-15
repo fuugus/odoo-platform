@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+
+<template id="snippet_custom_links" name="Header Links Snippet">
+  <section class="s_custom_links" data-snippet="s_custom_links" data-name="Header Links">
+    <ul class="nav justify-content-end" data-oe-type="repeater">
+      <li class="nav-item" data-oe-type="component">
+        <a class="nav-link" href="#" contenteditable="true">Link Text</a>
+      </li>
+    </ul>
+  </section>
+</template>
+
+</odoo>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="kf404" inherit_id="http_routing.404" name="Custom 404 Page">
+        <xpath expr="//div[hasclass('oe_structure')]" position="replace">
+            <div class="notfound-page text-center">
+                <div class="container">
+                    <h1>404</h1>
+                    <h2>Tut uns leid, diese Seite ist nicht auffindbar.</h2>
+                    <p>Leider können wir diese Seite nicht finden. Kehren Sie bitte zur Startseite zurück.</p>
+                    <a class="btn btn-primary" href="/" role="button">Zurück zur Startseite</a>
+                </div>
+            </div>
+        </xpath>
+    </template>
+</odoo>

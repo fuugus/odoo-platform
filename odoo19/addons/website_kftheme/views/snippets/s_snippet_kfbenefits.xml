@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="s_snippet_kfbenefits" name="Kaminfeger Benefits Snippet">
+        <section class="s_snippet_kfbenefits">
+            <div class="kfbenefits-wrapper">
+                <div class="kfbenefits container">
+                    <div class="text">
+                        <h2>Werde Mitglied und profitiere von Vorteilen</h2>
+                        <p>
+                            Als Mitglied des Schweizerischen Kaminfegerverbands profitierst du von zahlreichen Vorteilen. Von exklusiven Schulungen und Weiterbildungen bis hin zu einem umfangreichen Netzwerk von Fachleuten – wir unterstützen dich in deiner beruflichen Entwicklung.
+                        </p>
+                    </div>
+                    <div class="kfbenefits-grid">
+                        <div class="kfbenefit-item">
+                            <div class="icon-wrapper">
+                                <i class="fa-regular fa-window"></i>
+                            </div>
+                            <h3>Fort- und Weiterbildungsangebote</h3>
+                            <p>
+                                Nutze unsere umfangreichen Fort- und Weiterbildungsangebote, um deine Fähigkeiten zu erweitern und auf dem neuesten Stand der Technik zu bleiben.
+                            </p>
+                        </div>
+
+                        <div class="kfbenefit-item">
+                            <div class="icon-wrapper">
+                                <i class="fa-regular fa-magnifying-glass"></i>
+                            </div>
+                            <h3>Jobs-Portal</h3>
+                            <p>
+                                Durchsuche unser exklusives Jobs-Portal, um spannende Stellenangebote in der Kaminfegerbranche zu finden und deine Karriere voranzutreiben.
+                            </p>
+                        </div>
+
+                        <div class="kfbenefit-item">
+                            <div class="icon-wrapper">
+                                <i class="fa-regular fa-phone"></i>
+                            </div>
+                            <h3>Beratung in Rechts- und Lohnfragen</h3>
+                            <p>
+                                Erhalte professionelle Beratung in Rechts- und Lohnfragen, um sicherzustellen, dass du in deiner beruflichen Praxis rechtlich abgesichert bist.
+                            </p>
+                        </div>
+
+                        <div class="kfbenefit-item">
+                            <div class="icon-wrapper">
+                                <i class="fa-solid fa-tag"></i>
+                            </div>
+                            <h3>Pensionskassen</h3>
+                            <p>
+                                Profitiere von attraktiven Pensionskassenlösungen, die dir finanzielle Sicherheit im Alter bieten und deine Zukunft absichern.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="bottom-text">
+                        <p>
+                            Bitte melde dich bei deinem Kantonalverband, um Mitglied zu werden.
+                        </p>
+                        <a href="/" class="btn btn-primary">
+                            Kantonalverbände entdecken
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+</odoo>

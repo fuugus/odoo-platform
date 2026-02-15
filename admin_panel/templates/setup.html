@@ -22,14 +22,6 @@
             2. Generate a classic token with <strong>repo</strong> scope at <a href="https://github.com/settings/tokens" target="_blank" style="color: var(--primary);">github.com/settings/tokens</a>
         </small>
     </div>
-    <div class="form-row">
-        <label for="custom_addons_19">Custom Addons Repo (v19):</label>
-        <input type="text" id="custom_addons_19" value="{{ config.get('custom_addons_repos', {}).get('19', '') }}" placeholder="https://github.com/user/custom-addons.git (optional)">
-    </div>
-    <div class="form-row">
-        <label for="custom_addons_18">Custom Addons Repo (v18):</label>
-        <input type="text" id="custom_addons_18" value="{{ config.get('custom_addons_repos', {}).get('18', '') }}" placeholder="https://github.com/user/custom-addons.git (optional)">
-    </div>
     <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
 </div>
 
@@ -37,14 +29,7 @@
     {% for step_id in step_ids %}
     {% set step = steps[step_id] %}
     {% set locked = not is_step_unlocked(step_id, config) %}
-    {% set is_version = step_id in version_steps %}
-
-    {% if step_id == 'odoo_19' %}
-    <div class="version-steps-group">
-        <div class="version-steps-label">Install at least one Odoo version</div>
-    {% endif %}
-
-    <div class="step-card card {% if locked %}step-locked{% endif %}{% if is_version %} version-step{% endif %}" id="step-{{ step_id }}" data-status="{{ step.status }}">
+    <div class="step-card card {% if locked %}step-locked{% endif %}" id="step-{{ step_id }}" data-status="{{ step.status }}">
         <div class="step-header">
             <div class="step-info">
                 <span class="step-status-icon">
@@ -77,10 +62,6 @@
         </div>
     </div>
 
-    {% if step_id == 'odoo_18' %}
-    </div>
-    {% endif %}
-
     {% endfor %}
 </div>
 {% endblock %}
@@ -92,14 +73,10 @@ const STEP_DEPS = {{ step_deps | tojson }};
 async function saveConfig() {
     const domain = document.getElementById('domain').value;
     const github_token = document.getElementById('github_token').value;
-    const custom_addons_repos = {
-        "19": document.getElementById('custom_addons_19').value,
-        "18": document.getElementById('custom_addons_18').value,
-    };
     const resp = await fetch('/api/config', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({domain, github_token, custom_addons_repos})
+        body: JSON.stringify({domain, github_token})
     });
     if (resp.ok) {
         showToast('Configuration saved');

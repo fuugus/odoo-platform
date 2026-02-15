@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="downloads_page" name="Downloads">
+        <t t-call="website.layout">
+            
+            <style>
+                .kf-sidebar-link {
+                    color: #444;
+                    text-decoration: none;
+                    display: block;
+                    padding: 8px 0;
+                    padding-left: 10px;
+                    transition: color 0.2s;
+                    font-size: 0.95rem;
+                }
+                .kf-sidebar-link:hover {
+                    color: #dc3545;
+                }
+                .kf-sidebar-link.active {
+                    color: #dc3545;
+                    font-weight: bold;
+                }
+                
+                .kf-accordion-header {
+                    padding: 12px 0;
+                    border-bottom: 1px solid #eee;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    color: #333;
+                }
+                .kf-accordion-header a {
+                    flex-grow: 1;
+                    color: inherit;
+                    text-decoration: none;
+                    font-weight: bold;
+                }
+
+                .kf-accordion-toggle {
+                    cursor: pointer;
+                    padding: 5px 10px;
+                    color: #888;
+                    transition: color 0.2s;
+                    transition: transform 0.3s ease;
+                }
+                .kf-accordion-toggle:hover {
+                    color: #dc3545;
+                }
+                
+                .kf-accordion-toggle[aria-expanded="true"] {
+                    color: #dc3545;
+                    transform: rotate(180deg); 
+                }
+
+                .kf-file-row {
+                    background-color: #f8f9fa;
+                    border-bottom: 1px solid #fff;
+                    padding: 15px 20px;
+                    transition: background 0.2s;
+                }
+                .kf-file-row:hover {
+                    background-color: #e9ecef;
+                }
+                .kf-file-icon {
+                    color: #6c757d;
+                }
+
+                .kf-cat-tile {
+                    display: block;
+                    height: 180px;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    position: relative;
+                    background-size: cover;
+                    background-position: center;
+                    background-color: #eee;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                    text-decoration: none !important;
+                }
+                .kf-cat-tile:hover {
+                    transform: translateY(-3px);
+                }
+                .kf-cat-overlay {
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    top: 0;
+                    background: rgba(255,255,255,0.5);
+                    padding: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    text-align: center;
+                }
+                .kf-cat-title {
+                    color: black;
+                    font-weight: bold;
+                    font-size: 1.2rem;
+                }
+            </style>
+
+            <div id="wrap" class="bg-white pb-5">
+                
+                <div t-att-id="'kf_header_' + str(page_key)" class="oe_structure oe_empty">
+                    <div class="container pt-5 mb-5">
+                        
+                        <t t-if="page_key == 'downloads_main'">
+                            <h1 class="font-weight-bold">Downloads</h1>
+                            <p class="text-muted">Hier finden Sie wichtige Dokumente</p>
+                        </t>
+
+                        <t t-elif="page_key == 'members_only'">
+                            <h1 class="font-weight-bold">Mitglieder-Informationen</h1>
+                            <p class="text-muted">Interne Dokumente für den Vorstand</p>
+                        </t>
+
+                        <t t-else="">
+                            <h1 class="font-weight-bold">Dokumente</h1>
+                            <p class="text-muted">Bitte wählen Sie eine Kategorie</p>
+                        </t>
+                        
+                    </div>
+                </div>
+
+                <div class="container">
+                    <div class="row">
+                        
+                        <div class="col-lg-3 mb-5">
+                            <h4 class="font-weight-bold mb-4">Bereich</h4>
+                            
+                            <div class="kf-sidebar">
+                                <t t-foreach="root_categories" t-as="root">
+                                    
+                                    <t t-set="is_root_active" t-value="current_category and (current_category.id == root.id or current_category.x_studio_ubergeordnete_kategorie.id == root.id)"/>
+                                    <t t-set="children" t-value="get_children(root.id)"/>
+                                    
+                                    <div class="kf-accordion-item">
+                                        <div class="kf-accordion-header">
+                                            <a t-attf-href="#{base_url}?category=#{root.id}" 
+                                               t-attf-class="#{ 'text-danger' if is_root_active else '' }">
+                                                <t t-esc="root.x_name"/>
+                                            </a>
+
+                                            <t t-if="children">
+                                                <i class="fa fa-chevron-down kf-accordion-toggle"
+                                                   data-bs-toggle="collapse"
+                                                   t-attf-data-bs-target="#cat_collapse_#{root.id}"
+                                                   t-attf-aria-expanded="#{ 'true' if is_root_active else 'false' }"/>
+                                            </t>
+                                        </div>
+
+                                        <div t-if="children" 
+                                             t-attf-id="cat_collapse_#{root.id}"
+                                             t-attf-class="collapse #{ 'show' if is_root_active else '' } pl-2 border-left ml-2 mt-1">
+                                            
+                                            <t t-foreach="children" t-as="child">
+                                                <a t-attf-href="#{base_url}?category=#{child.id}" 
+                                                   t-attf-class="kf-sidebar-link #{'active' if current_category and current_category.id == child.id else ''}">
+                                                    <t t-esc="child.x_name"/>
+                                                </a>
+                                            </t>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-9 pl-lg-5">
+                            
+                            <t t-if="current_category">
+                                <h3 class="font-weight-bold mb-4">
+                                    <span t-if="current_category.x_studio_ubergeordnete_kategorie">
+                                        <span class="text-dark"><t t-esc="current_category.x_studio_ubergeordnete_kategorie.x_name"/></span>
+                                        <span class="text-muted mx-2">&gt;</span>
+                                    </span>
+                                    <span class="text-dark"><t t-esc="current_category.x_name"/></span>
+                                </h3>
+                            </t>
+
+                            <div t-if="tiles_categories" class="row mb-5">
+                                <t t-foreach="tiles_categories" t-as="cat">
+                                    <div class="col-md-4 mb-4">
+                                        <a t-attf-href="#{base_url}?category=#{cat.id}" 
+                                           class="kf-cat-tile"
+                                           t-attf-style="background-image: url('/web/image/x_kategorie/#{cat.id}/x_avatar_image');">
+                                            
+                                            <div class="kf-cat-overlay">
+                                                <div class="kf-cat-title">
+                                                    <t t-esc="cat.x_name"/>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </div>
+                                </t>
+                            </div>
+
+                            <t t-if="current_category">
+                                <div class="file-list mb-5">
+                                    <t t-if="files">
+                                        <t t-foreach="files" t-as="file">
+                                            <div class="kf-file-row d-flex align-items-center justify-content-between">
+                                                <div class="d-flex align-items-center">
+                                                    <span class="text-dark font-weight-medium">
+                                                        <t t-esc="file.x_name"/>
+                                                    </span>
+                                                </div>
+                                                
+                                                <a t-attf-href="/web/content/x_datei/#{file.id}/x_studio_datei/#{file.x_name}?download=true" target="_blank" class="kf-file-icon h4 mb-0">
+                                                    <i class="fa fa-file-text-o"/>
+                                                </a>
+                                            </div>
+                                        </t>
+                                    </t>
+                                    <t t-else="">
+                                        <t t-if="not tiles_categories">
+                                            <div class="alert alert-light border">
+                                                Keine Dateien in dieser Kategorie gefunden.
+                                            </div>
+                                        </t>
+                                    </t>
+                                </div>
+                            </t>
+
+                            <div class="mt-5 pt-4 border-top">
+                                <p class="font-weight-bold mb-1">Dateien nicht gefunden?</p>
+                                <p>
+                                    Versuchen Sie es im 
+                                    <a href="#" class="text-danger">Mitgliederbereich</a>
+                                </p>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </t>
+    </template>
+</odoo>

@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="s_snippet_kfdoubleblockaccordion" name="Kaminfeger Doppelblock Akkordeon Snippet">
+        <section class="s_snippet_kfdoubleblockaccordion">
+            <div class="kfdoubleblock-wrapper">
+                <div class="kfdoubleblock container">
+                    <div class="kfdoubleblock-grid">
+                        <div>
+                            <h1>Kantonalverbände</h1>
+                            <p>
+                                Schwarz ist das neue Weiß! Als Kaminfeger bist du nicht nur dafür verantwortlich, Schornsteine sauber zu halten und Feuerstätten sicher zu prüfen – du wirst auch zum Glücksbringer, Umweltschützer und Brandschutzprofi in einer Person. <br />
+                                Starte jetzt in eine Zukunft mit Perspektive – und vielleicht einem Hauch Ruß im Gesicht!</p>
+                            <img class="w-full block" src="/website_kftheme/static/src/img/content/doubleblockaccordion.png" alt="dashboard image" />
+                        </div>
+                        <div data-name="Accordion" data-snippet="s_accordion" class="s_accordion">
+                            <div id="myCollapse" class=" accordion">
+                                <div class="accordion-item position-relative z-1" data-name="Accordion Item">
+                                    <button type="button" class="accordion-header accordion-button justify-content-between gap-2 bg-transparent h6-fs fw-bold text-decoration-none text-reset transition-none" data-bs-toggle="collapse" aria-expanded="true" id="accordion-button547589_1" data-bs-target="#myCollapseTab547589_1" aria-controls="myCollapseTab547589_1"><span class="flex-grow-1 o_default_snippet_text">Aargau</span></button>
+                                    <div class="accordion-collapse collapse show" data-bs-parent="#myCollapse" role="region" id="myCollapseTab547589_1" aria-labelledby="accordion-button547589_1">
+                                        <div class="accordion-body">
+                                            <p class="o_default_snippet_text">
+                                                Präsident<br />
+                                                Lütolf Ulrich<br /><br />
+                                                Weitere Informationen unter <a href="http://www.kaminfegerag.ch">www.kaminfegerag.ch</a>.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item position-relative z-1" data-name="Accordion Item">
+                                    <button type="button" class="accordion-header accordion-button collapsed justify-content-between gap-2 bg-transparent h6-fs fw-bold text-decoration-none text-reset transition-none" data-bs-toggle="collapse" aria-expanded="false" id="accordion-button547589_2" data-bs-target="#myCollapseTab547589_2" aria-controls="myCollapseTab547589_2"><span class="flex-grow-1 o_default_snippet_text">Appenzell</span></button>
+                                    <div class="accordion-collapse collapse" data-bs-parent="#myCollapse" role="region" id="myCollapseTab547589_2" aria-labelledby="accordion-button547589_2">
+                                        <div class="accordion-body">
+                                            <p class="o_default_snippet_text">
+                                                Präsident<br />
+                                                Kast Ralph
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item position-relative z-1" data-name="Accordion Item">
+                                    <button type="button" class="accordion-header accordion-button collapsed justify-content-between gap-2 bg-transparent h6-fs fw-bold text-decoration-none text-reset transition-none" data-bs-toggle="collapse" aria-expanded="false" id="accordion-button547589_3" data-bs-target="#myCollapseTab547589_3" aria-controls="myCollapseTab547589_3"><span class="flex-grow-1 o_default_snippet_text">Basel</span></button>
+                                    <div class="accordion-collapse collapse" data-bs-parent="#myCollapse" role="region" id="myCollapseTab547589_3" aria-labelledby="accordion-button547589_3">
+                                        <div class="accordion-body">
+                                            <p class="o_default_snippet_text">
+                                                Präsident<br />
+                                                Vogel Dominique<br /><br />
+                                                Weitere Informationen unter <a href="https://www.kmv-bb.ch">www.kmv-bb.ch</a>.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item position-relative z-1" data-name="Accordion Item">
+                                    <button type="button" class="accordion-header accordion-button collapsed justify-content-between gap-2 bg-transparent h6-fs fw-bold text-decoration-none text-reset transition-none" data-bs-toggle="collapse" aria-expanded="false" id="accordion-button547589_4" data-bs-target="#myCollapseTab547589_4" aria-controls="myCollapseTab547589_4"><span class="flex-grow-1 o_default_snippet_text">Bern</span></button>
+                                    <div class="accordion-collapse collapse" data-bs-parent="#myCollapse" role="region" id="myCollapseTab547589_4" aria-labelledby="accordion-button547589_4">
+                                        <div class="accordion-body">
+                                            <p class="o_default_snippet_text">
+                                                Präsident<br />
+                                                Wüthrich Bernhard<br /><br />
+                                                Weitere Informationen unter <a href="https://www.kaminfeger-be.ch">www.kaminfeger-be.ch</a>.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item position-relative z-1" data-name="Accordion Item">
+                                    <button type="button" class="accordion-header accordion-button collapsed justify-content-between gap-2 bg-transparent h6-fs fw-bold text-decoration-none text-reset transition-none" data-bs-toggle="collapse" aria-expanded="false" id="accordion-button547589_5" data-bs-target="#myCollapseTab547589_5" aria-controls="myCollapseTab547589_5"><span class="flex-grow-1 o_default_snippet_text">Bern</span></button>
+                                    <div class="accordion-collapse collapse" data-bs-parent="#myCollapse" role="region" id="myCollapseTab547589_5" aria-labelledby="accordion-button547589_5">
+                                        <div class="accordion-body">
+                                            <p class="o_default_snippet_text">
+                                                Präsident<br />
+                                                Hostettler Cédric<br /><br />
+                                                Weitere Informationen unter <a href="https://ramoneurs-fr.ch/">ramoneurs-fr.ch</a>.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item position-relative z-1" data-name="Accordion Item">
+                                    <button type="button" class="accordion-header accordion-button collapsed justify-content-between gap-2 bg-transparent h6-fs fw-bold text-decoration-none text-reset transition-none" data-bs-toggle="collapse" aria-expanded="false" id="accordion-button547589_6" data-bs-target="#myCollapseTab547589_6" aria-controls="myCollapseTab547589_6"><span class="flex-grow-1 o_default_snippet_text">Genf</span></button>
+                                    <div class="accordion-collapse collapse" data-bs-parent="#myCollapse" role="region" id="myCollapseTab547589_6" aria-labelledby="accordion-button547589_6">
+                                        <div class="accordion-body">
+                                            <p class="o_default_snippet_text">
+                                                Präsident<br />
+                                                Jost Jonathan
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="accordion-item position-relative z-1" data-name="Accordion Item">
+                                    <button type="button" class="accordion-header accordion-button collapsed justify-content-between gap-2 bg-transparent h6-fs fw-bold text-decoration-none text-reset transition-none" data-bs-toggle="collapse" aria-expanded="false" id="accordion-button547589_7" data-bs-target="#myCollapseTab547589_7" aria-controls="myCollapseTab547589_7"><span class="flex-grow-1 o_default_snippet_text">Glarus</span></button>
+                                    <div class="accordion-collapse collapse" data-bs-parent="#myCollapse" role="region" id="myCollapseTab547589_7" aria-labelledby="accordion-button547589_7">
+                                        <div class="accordion-body">
+                                            <p class="o_default_snippet_text">
+                                                Präsident<br />
+                                                Elmer Rolf
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+</odoo>

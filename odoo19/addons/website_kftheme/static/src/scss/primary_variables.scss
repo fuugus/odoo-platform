@@ -1,0 +1,48 @@
+$o-website-values-palettes: (
+    ( // Templates
+        // Colors
+        // Fonts
+        // Buttons
+        // ...
+    ),
+);
+
+
+// Font configurations
+
+$o-theme-font-configs: (
+    'bahnschrift': (
+            'family': ('bahnschrift', sans-serif),
+            'properties' : ('base': ('font-size-base': 1rem,),),
+    ),
+);
+
+
+// Color palettes
+
+$o-color-palettes: map-merge($o-color-palettes,
+        ('kaminfeger': ('o-color-1': #EC1921,
+                'o-color-2': #000000,
+                'o-color-3': #F3F4F6,
+                'o-color-4': #E5E7EB,
+                'o-color-5': #111928,
+            ),
+        ));
+
+$o-selected-color-palettes-names: append($o-selected-color-palettes-names, 'kaminfeger');
+
+
+$o-website-values-palettes: (
+    ('color-palettes-name': 'kaminfeger'
+    ),
+);
+
+
+$o-website-values-palettes: (
+    (
+        'font': 'bahnschrift',
+        'headings-font': 'bahnschrift',
+        'navbar-font': 'bahnschrift',
+        'buttons-font': 'bahnschrift',
+    ),
+);

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <record id="my_header_menu" model="website.menu">
+            <field name="name">My Custom Main Menu</field>
+            <field name="website_id" ref="website.default_website"/>
+        </record>
+        
+    </data>
+</odoo>

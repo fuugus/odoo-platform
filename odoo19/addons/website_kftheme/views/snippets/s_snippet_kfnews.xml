@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+<template id="s_snippet_kfnews" name="Kaminfeger News Snippet">
+    <section class="s_snippet_kfnews">
+        <div t-nocache="Fetch fresh blog posts every time">
+            <t t-set="posts" t-value="request.env['blog.post'].sudo().search([('website_published', '=', True)], order='published_date desc', limit=15)"/>
+            
+            <div class="kfnews-wrapper">
+                <div class="kfnews container">
+                    <h2>Aktuelles</h2>
+                    
+                    <t t-if="posts">
+                        <div class="news-grid">
+                            <div class="splide splide-news">
+                                <div class="splide__track">
+                                    <ul class="splide__list">
+                                        <t t-foreach="posts" t-as="post">
+                                            <li class="splide__slide">
+                                                <div class="news-card">
+
+                                                    <t t-set="cover_data" t-value="json.loads(post.cover_properties or '{}')"/>
+                                                    <t t-set="post_image" t-value="cover_data.get('background-image', 'none')"/>
+
+                                                    <t t-if="post_image and post_image != 'none'">
+                                                        <t t-set="post_image" t-value="post_image.replace('url(', '').replace(')', '').replace('&quot;', '').replace('&amp;quot;', '')"/>
+                                                    </t>
+
+                                                    <!-- <a t-att-href="post.website_url">
+                                                        <div t-attf-style="background-image: url('/web/image/blog.post/#{post.id}/image_512'); height: 200px; background-size: cover; background-position: center;" class="news-img"></div>
+                                                    </a> -->
+
+                                                    <a t-att-href="post.website_url" style="text-decoration: none;">
+                                                        <div t-attf-style="background-image: url('#{post_image}'); height: 200px; background-size: cover; background-position: center;" 
+                                                            class="news-img">
+                                                            <t t-if="not post_image or post_image == 'none'">
+                                                                <div class="h-100 w-100 d-flex align-items-center justify-content-center bg-light">
+                                                                    <i class="fa fa-newspaper-o fa-3x text-muted"/>
+                                                                </div>
+                                                            </t>
+                                                        </div>
+                                                    </a>
+
+                                                    <div class="card-text">
+                                                        <h3 class="card-title">
+                                                            <a t-att-href="post.website_url" t-esc="post.name"/>
+                                                        </h3>
+                                                        <p class="card-lead">
+                                                            <span t-field="post.subtitle"/>
+                                                        </p>
+                                                        <p class="card-meta">
+                                                            <span t-field="post.published_date" t-options="{'widget': 'date'}"/> ·
+                                                            <span class="card-author">
+                                                                <t t-esc="post.author_id.name if post.author_id else 'Unbekannt'"/>
+                                                            </span>
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </li>
+                                        </t>
+                                    </ul>
+                                </div>
+                                <div class="splide__arrows"></div>
+                                <ul class="splide__pagination"></ul>
+                            </div>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div class="alert alert-info">Keine aktuellen Nachrichten vorhanden.</div>
+                    </t>
+                </div>
+            </div>
+        </div>
+    </section>
+</template>
+
+</odoo>

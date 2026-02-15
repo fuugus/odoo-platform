@@ -1,0 +1,40 @@
+.notfound-page {
+    background-color: #ffffff;
+    padding: 96px 0;
+
+    h1 {
+        color: o-color('o-color-1');
+
+        font-size: 128px;
+        font-style: normal;
+        font-weight: 700;
+        line-height: 128px;
+
+        margin-bottom: 48px;
+    }
+
+    h2 {
+        color: #111928;
+
+        font-size: 36px;
+        font-style: normal;
+        font-weight: 700;
+        line-height: 150%;
+        /* 54px */
+
+        margin-bottom: 24px;
+    }
+
+    p {
+        color: #6B7280;
+
+        font-size: 18px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: 150%;
+        /* 27px */
+
+        margin-bottom: 32px;
+
+    }
+}

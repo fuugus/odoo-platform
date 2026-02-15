@@ -47,21 +47,25 @@ No test suite or linter is configured.
 
 **Two separate Python virtual environments:**
 - `.venv/` (repo root) — runs the FastAPI admin panel (fastapi, uvicorn, jinja2, websockets)
-- `/opt/odoo/venv/` — runs Odoo instances (odoo requirements.txt)
+- `/opt/odoo{ver}/venv/` — runs Odoo instances (odoo requirements.txt), one per version
 
 **Instance naming convention:**
 - Instance/DB name: `{client}_{env}` (e.g., `kaminfeger_prod`)
 - Subdomain: `{client}-{env}.{domain}` (underscores become hyphens in URLs)
 - Systemd service: `odoo-{instance_name}`
 - Config file: `/etc/odoo/{instance_name}.conf`
-- Data dir: `/opt/odoo/data/{instance_name}`
+- Data dir: `/opt/odoo{ver}/data/{instance_name}`
 
-**Odoo filesystem layout (`/opt/odoo/`):**
-- `odoo/` — Community source (git, branch 19.0)
-- `enterprise/` — Enterprise source (git, branch 19.0, requires GitHub token)
-- `custom-addons/` — Custom modules (git pull on deploy)
+**Custom addons (in this repo):**
+- `odoo19/addons/` — Custom Odoo 19 modules (e.g., `website_kftheme`)
+- `odoo18/addons/` — Custom Odoo 18 modules
+- Deploy rsyncs from `odoo{ver}/addons/` → `/opt/odoo{ver}/data/{instance_name}/addons/`
+
+**Odoo filesystem layout (`/opt/odoo{ver}/`):**
+- `odoo/` — Community source (git, branch {ver}.0)
+- `enterprise/` — Enterprise source (git, branch {ver}.0, requires GitHub token)
 - `venv/` — Odoo Python venv
-- `data/{instance_name}/` — per-instance data dir (filestore, sessions)
+- `data/{instance_name}/` — per-instance data dir (filestore, sessions, addons)
 
 **Port allocation:**
 - 8069+ → Odoo instances (each gets two consecutive ports: HTTP and gevent)

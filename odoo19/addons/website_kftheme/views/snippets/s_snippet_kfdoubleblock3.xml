@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="s_snippet_kfdoubleblock3" name="Kaminfeger Doppelblock 3 Snippet">
+        <section class="s_snippet_kfdoubleblock3">
+            <div class="kfdoubleblock-wrapper">
+                <div class="kfdoubleblock container">
+                    <div class="kfdoubleblock-grid">
+                        <div>
+                            <h2>Wir vertreten den Kaminfeger Beruf</h2>
+                            <p>
+                                Der Schweizerische Kaminfegerverband setzt sich für die Interessen der Kaminfegerbranche ein. Wir arbeiten eng mit Behörden, Institutionen und anderen Verbänden zusammen, um die Qualität und Sicherheit in der Kaminfegerarbeit zu gewährleisten.
+                            </p>
+                            <a href="#">
+                                Mehr erfahren
+                                <i class="fa-solid fa-chevron-right"></i>
+                            </a>
+                        </div>
+                        <div>
+                            <p>
+                                Der Schweizerische Kaminfegerverband ist die Stimme der Kaminfegerbranche. Wir setzen uns für die Interessen unserer Mitglieder ein und fördern die Qualität und Sicherheit in der Kaminfegerarbeit. <br />
+                                Unsere Dienstleistungen umfassen unter anderem Schulungen, Beratung und Unterstützung in Rechts- und Lohnfragen.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </template>
+
+</odoo>

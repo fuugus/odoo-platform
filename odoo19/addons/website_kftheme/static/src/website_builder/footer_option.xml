@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-inherit="website.FooterTemplateOption" t-inherit-mode="extension">
+    <BuilderSelect position="inside">
+        <BuilderSelectItem
+            title.translate="Kaminfeger Footer"
+            actionParam="{
+                view: 'website_kftheme.template_footer_website_kaminfeger',
+                vars: { 'footer-template': 'template_footer_website_kaminfeger' }
+            }"
+        >
+            <Img
+                attrs="{ style: 'width: 100%;' }"
+                src="'/website_kftheme/static/src/img/snippets_options/template_footer_website_kaminfeger.jpg'"
+            />
+        </BuilderSelectItem>
+    </BuilderSelect>
+</t>
+
+</templates>

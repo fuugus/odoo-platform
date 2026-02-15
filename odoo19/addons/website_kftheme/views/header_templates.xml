@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- remove unused menu -->
+    <template id="template_header_sales_three_kaminfeger" inherit_id="website.template_header_sales_three" name="KF Theme - Header" active="True">
+        <xpath expr="//ul[hasclass('o_header_sales_three_small_links')]" position="replace">
+            
+        </xpath>
+
+        <xpath expr="//div[hasclass('o_header_sales_three_top')]/div" position="replace">
+
+            <div class="container d-flex justify-content-between align-items-center h-100">
+
+                <div class="kf-top-header-links">
+                    <t t-foreach="env.ref('website_kftheme.my_header_menu').child_id" t-as="submenu">
+                        <t t-call="website.submenu">
+                            <t t-set="submenu" t-value="submenu"/>
+
+                            <t t-set="item_class" t-valuef="nav-item"/>
+                            <t t-set="link_class" t-valuef="nav-link"/>
+                        </t>
+                    </t>
+                </div>
+
+                <div class="header-contact-info">
+                    <div class="d-flex align-items-center">
+                        <div class="icon-wrapper">
+                            <i class="fa-regular fa-phone"></i>
+                        </div>
+                        <span class="ml-2">+41 (0) 62 834 76 66</span>
+                    </div> 
+                    <div class="d-flex align-items-center">
+                        <div class="icon-wrapper">
+                            <i class="fa-solid fa-envelope"></i>
+                        </div>
+                        <span class="ml-2">
+                            <a href="mailto:verband@kaminfeger.ch">
+                                verband@kaminfeger.ch
+                            </a>
+                        </span>
+                    </div>
+                </div>
+
+                <ul class="navbar-nav kf-top-link-icons">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/shop/cart" role="button">
+                            <i class="fa fa-shopping-cart"></i>
+                            <!-- <span class="badge badge-pill badge-primary"
+                                t-esc="request.website.sale_get.cart_quantity"
+                                t-if="request.website.sale_get_cart_quantity() > 0"
+                            ></span> -->
+                        </a>
+                    </li>
+                    |
+                    <li class="nav-item">
+                        <a class="nav-link" href="/shop/search" role="button">
+                            <i class="fa fa-search"></i>
+                            Suche
+                        </a>
+                    </li>
+                    |
+                    <t t-call="portal.language_selector">
+                        <t t-set="_div_class" t-valuef="nav-item dropdown"/>
+                        <t t-set="_btn_class" t-valuef="nav-link dropdown-toggle"/>
+                    </t>
+                </ul>
+            </div>
+
+        </xpath>
+
+    </template>
+
+    <template id="s_mega_menu_odoo_menu_kaminfeger" inherit_id="website.s_mega_menu_odoo_menu" name="KF Theme - Megamenu" active="True">
+        <xpath expr="//div[hasclass('container')]" position="replace">
+            <div class="kf-megamenu container">
+                <div class="mega-menu-col">
+                    <h3 class="mega-menu-title">
+                        <i class="fa-solid fa-book"></i>
+                        Verband
+                    </h3>
+                    <ul class="mega-menu-list">
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Verbandsteam
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Verbandszeitung
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Verkausstelle
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Partnermitglieder
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Gründung und Geschichte
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Pensionskasse Kaminfeger
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="mega-menu-col">
+                    <h3 class="mega-menu-title">
+                        <i class="fa-solid fa-book"></i>
+                        Verbandsorgane
+                    </h3>
+                    <ul class="mega-menu-list">
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Delegiertenversammlung
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Zentralvorstand
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Kantonalverbände
+                            </a>
+                        </li>
+                        <li class="mega-menu-item">
+                            <a href="/kaminfeger/ueber-uns" class="mega-menu-link">
+                                <i class="fa-solid fa-chevron-right"></i>
+                                Kommisionen
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </xpath>
+    </template>
+
+</odoo>

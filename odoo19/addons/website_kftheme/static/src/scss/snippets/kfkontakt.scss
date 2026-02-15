@@ -1,0 +1,187 @@
+.kontakt-wrapper {
+    background: linear-gradient(0deg, #ffffff 55%, #F3F4F6 55%);
+
+    padding-top: 96px;
+    padding-bottom: 96px;
+
+    .kontakt-header {
+
+        text-align: center;
+        margin-bottom: 96px;
+
+        h1 {
+            color: #000000;
+
+            font-size: 36px;
+            font-style: normal;
+            font-weight: 700;
+            line-height: 125%;
+            /* 45px */
+            letter-spacing: -0.36px;
+
+            margin-bottom: 16px;
+        }
+
+        p {
+            color: #9CA3AF;
+            font-size: 20px;
+            font-style: normal;
+            font-weight: 400;
+            line-height: 150%;
+            /* 30px */
+        }
+    }
+
+    .s_website_form {
+        background-color: #ffffff;
+        padding: 32px !important;
+        max-width: 812px;
+        margin: 0 auto 96px auto;
+
+        border-radius: 8px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+
+        .s_website_form_rows {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px 32px;
+
+            .s_website_form_field {
+                padding: 0 !important;
+                margin: 0 !important;
+
+                .col-form-label {
+                    padding-top: 0 !important;
+                }
+
+                &:has(textarea) {
+                    grid-column: span 2;
+                }
+
+                &:has(.form-check) {
+                    grid-column: span 2;
+
+                    .s_col_no_resize {
+                        .s_website_form_label {
+                            display: none;
+                        }
+                    }
+
+                    .col-sm {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+
+                        flex-direction: row;
+                    }
+                }
+
+                .s_col_no_resize {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+            }
+        }
+
+        .s_website_form_submit {
+            text-align: start !important;
+            padding: 0 !important;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="number"] {
+            padding: 14px 16px;
+            border: 1px solid #D1D5DB;
+            background: #F9FAFB;
+
+            border-radius: 0;
+        }
+
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #D1D5DB;
+            background: #F9FAFB;
+
+            border-radius: 4px;
+
+            &:checked {
+                background-color: o-color('o-color-1') !important;
+                border-color: o-color('o-color-1') !important;
+                color: o-color('o-color-3') !important;
+            }
+        }
+
+        textarea {
+            padding: 14px 16px;
+            border: 1px solid #D1D5DB;
+            background: #F9FAFB;
+
+            border-radius: 0;
+        }
+    }
+
+    .kontakt-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 64px;
+
+        @media (max-width: 993px) {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .kontakt-grid-item {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+
+            .icon {
+                padding-bottom: 20px;
+                border-bottom: 1px solid #000000;
+
+                .icon-wrapper {
+                    width: 48px;
+                    height: 48px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    border-radius: 50%;
+
+                    background-color: o-color('o-color-1');
+
+                    i {
+                        font-size: 24px;
+                        color: #ffffff;
+                    }
+                }
+            }
+
+            h2 {
+                color: #000000;
+
+                font-size: 20px;
+                font-style: normal;
+                font-weight: 700;
+                line-height: 125%;
+                /* 25px */
+
+                margin-bottom: 8px;
+            }
+
+            p {
+                color: #6B7280;
+
+                font-size: 16px;
+                font-style: normal;
+                font-weight: 400;
+                line-height: 150%;
+                /* 24px */
+
+                margin-bottom: 0;
+            }
+        }
+    }
+}
