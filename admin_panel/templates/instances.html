@@ -93,9 +93,6 @@
     {% else %}
     <p class="empty-state">No instances created yet.</p>
     {% endif %}
-    <div id="sync-log" class="step-log" style="display:none;">
-        <pre></pre>
-    </div>
 </div>
 
 <div class="card no-border">
@@ -156,15 +153,36 @@ function syncInstance(name) {
     if (!confirm(`Sync ${name} from production? This will REPLACE the current database and filestore.`)) return;
     if (!confirm('This cannot be undone. Are you sure?')) return;
 
-    const logDiv = document.getElementById('sync-log');
+    const row = document.getElementById('row-' + name);
+    if (!row) return;
+
+    const old = document.getElementById('sync-log-row');
+    if (old) old.remove();
+
+    const cols = row.querySelectorAll('td').length;
+    const logRow = document.createElement('tr');
+    logRow.id = 'sync-log-row';
+    const td = document.createElement('td');
+    td.colSpan = cols;
+    td.innerHTML = '<div class="sync-log-inline"><pre></pre></div>';
+    logRow.appendChild(td);
+    row.after(logRow);
+
+    const logDiv = td.querySelector('.sync-log-inline');
+    let hadError = false;
+
     connectWebSocket(`/ws/instance/sync/${name}`, logDiv, {
         onStatus(status) {
             if (status === 'done') {
                 logDiv.querySelector('pre').textContent += '\nSync complete!\n';
                 showToast('Instance synced from prod');
+                if (!hadError) {
+                    setTimeout(() => logRow.remove(), 2000);
+                }
             }
         },
-        onError() {
+        onError(msg) {
+            hadError = true;
             showToast('Sync failed', 'error');
         }
     });

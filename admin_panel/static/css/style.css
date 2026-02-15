@@ -570,6 +570,30 @@ input:focus, select:focus {
     word-break: break-all;
 }
 
+.sync-log-inline {
+    margin: 16px 0;
+    max-height: 400px;
+    overflow-y: auto;
+    background: #1b1b2f;
+    border: 1px solid #2a2a3c;
+    border-radius: 3px;
+    padding: 12px;
+}
+
+.sync-log-inline pre {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #c8c8d4;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+#sync-log-row td {
+    padding: 0;
+    border: none;
+}
+
 .step-card.step-locked {
     opacity: 0.45;
 }
