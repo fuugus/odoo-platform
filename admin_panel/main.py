@@ -13,8 +13,13 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPExcept
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from config import load_config, save_config, PLATFORM_DIR
+from auth import (
+    is_auth_enabled, get_current_user, is_path_exempt,
+    get_google_auth_url, exchange_code_for_user, generate_state, verify_ws_auth,
+)
 from setup_steps import (
     SETUP_STEPS, STEP_ORDER, STEP_DEPS, VERSION_STEPS,
     is_step_unlocked, get_installed_versions, odoo_base_dir,
@@ -107,6 +112,103 @@ def _step_deps_json() -> dict:
     }
 
 
+# ─── Auth Middleware ──────────────────────────────────────────────────────────
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    config = load_config()
+    if not is_auth_enabled(config):
+        return await call_next(request)
+    if is_path_exempt(request.url.path):
+        return await call_next(request)
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+    return await call_next(request)
+
+
+# Session middleware (must be added AFTER auth middleware so it wraps it)
+_init_config = load_config()
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_init_config.get("auth", {}).get("session_secret", "fallback-dev-key"),
+    session_cookie="odoo_platform_session",
+    max_age=14 * 24 * 60 * 60,
+    same_site="lax",
+    https_only=False,
+)
+
+
+# ─── Auth Routes ─────────────────────────────────────────────────────────────
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: str = ""):
+    config = load_config()
+    user = get_current_user(request)
+    if user and is_auth_enabled(config):
+        return RedirectResponse(url="/")
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "error": error,
+        "auth_enabled": is_auth_enabled(config),
+    })
+
+
+@app.get("/auth/google")
+async def auth_google(request: Request):
+    config = load_config()
+    if not is_auth_enabled(config):
+        return RedirectResponse(url="/")
+    state = generate_state()
+    request.session["oauth_state"] = state
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    redirect_uri = f"{scheme}://{request.url.netloc}/auth/callback"
+    auth_url = get_google_auth_url(config, redirect_uri, state)
+    return RedirectResponse(url=auth_url)
+
+
+@app.get("/auth/callback")
+async def auth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    if error:
+        return RedirectResponse(url=f"/login?error={error}")
+    config = load_config()
+    if not is_auth_enabled(config):
+        return RedirectResponse(url="/")
+    expected_state = request.session.pop("oauth_state", "")
+    if not state or state != expected_state:
+        return RedirectResponse(url="/login?error=invalid_state")
+    if not code:
+        return RedirectResponse(url="/login?error=no_code")
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    redirect_uri = f"{scheme}://{request.url.netloc}/auth/callback"
+    user_info = await exchange_code_for_user(code, config, redirect_uri)
+    if not user_info or not user_info.get("email"):
+        return RedirectResponse(url="/login?error=auth_failed")
+    email = user_info["email"].lower().strip()
+    request.session["user"] = {
+        "email": email,
+        "name": user_info.get("name", email),
+        "picture": user_info.get("picture", ""),
+    }
+    return RedirectResponse(url="/")
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login")
+
+
+@app.post("/api/auth/remove")
+async def api_remove_auth(request: Request):
+    config = load_config()
+    config["auth"]["google_client_id"] = ""
+    config["auth"]["google_client_secret"] = ""
+    save_config(config)
+    request.session.clear()
+    return {"status": "ok"}
+
+
 # ─── Pages ───────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -129,6 +231,7 @@ async def setup_page(request: Request):
         "step_deps": _step_deps_json(),
         "is_step_unlocked": is_step_unlocked,
         "version_steps": VERSION_STEPS,
+        "user": get_current_user(request),
     })
 
 
@@ -155,6 +258,7 @@ async def dashboard_page(request: Request):
         "config": config,
         "instances": instances,
         "public_ip": get_public_ip(),
+        "user": get_current_user(request),
     })
 
 
@@ -180,6 +284,7 @@ async def instances_page(request: Request):
         "config": config,
         "instances": instances,
         "installed_versions": get_installed_versions(config),
+        "user": get_current_user(request),
     })
 
 
@@ -190,6 +295,7 @@ async def deploy_page(request: Request):
     return templates.TemplateResponse("deploy.html", {
         "request": request,
         "config": config,
+        "user": get_current_user(request),
     })
 
 
@@ -200,6 +306,7 @@ async def databases_page(request: Request):
     return templates.TemplateResponse("databases.html", {
         "request": request,
         "config": config,
+        "user": get_current_user(request),
     })
 
 
@@ -216,10 +323,15 @@ async def api_update_config(request: Request):
     """Update platform configuration."""
     data = await request.json()
     config = load_config()
-    allowed_keys = {"domain", "github_token"}
+    allowed_keys = {"domain", "github_token", "auth"}
     for key in data:
         if key in allowed_keys:
-            config[key] = data[key]
+            if key == "auth":
+                existing_auth = config.get("auth", {})
+                existing_auth.update(data[key])
+                config["auth"] = existing_auth
+            else:
+                config[key] = data[key]
     save_config(config)
     return {"status": "ok", "config": config}
 
@@ -435,6 +547,12 @@ async def ws_setup_step(websocket: WebSocket, step_id: str):
     """WebSocket endpoint for running setup steps with live output."""
     await websocket.accept()
 
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
     if step_id not in SETUP_STEPS:
         await websocket.send_json({"type": "error", "message": f"Unknown step: {step_id}"})
         await websocket.close()
@@ -459,6 +577,13 @@ async def ws_setup_step(websocket: WebSocket, step_id: str):
 async def ws_create_instance(websocket: WebSocket):
     """WebSocket endpoint for creating instances with live output."""
     await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
     try:
         data = await websocket.receive_json()
         client = data.get("client")
@@ -490,6 +615,13 @@ async def ws_create_instance(websocket: WebSocket):
 async def ws_sync_instance(websocket: WebSocket, instance_name: str):
     """WebSocket endpoint for syncing an instance from prod with live output."""
     await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
     try:
         async def ws_send(message: str):
             await websocket.send_json({"type": "log", "message": message})

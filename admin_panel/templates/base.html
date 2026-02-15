@@ -31,7 +31,14 @@
             </a></li>
         </ul>
         <div class="sidebar-footer">
+            {% if user %}
+            <div class="sidebar-user">
+                <span class="sidebar-user-email">{{ user.email }}</span>
+                <a href="/logout" class="sidebar-logout">Sign out</a>
+            </div>
+            {% else %}
             <a href="/api/health" target="_blank">API Health</a>
+            {% endif %}
         </div>
     </nav>
     <main class="content">

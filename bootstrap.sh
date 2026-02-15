@@ -43,7 +43,8 @@ pip install --quiet \
     python-multipart==0.0.* \
     websockets==14.* \
     httpx==0.28.* \
-    psutil==6.*
+    psutil==6.* \
+    itsdangerous==2.*
 echo "  ✓ Python dependencies installed"
 
 # 4. Create systemd service for admin panel

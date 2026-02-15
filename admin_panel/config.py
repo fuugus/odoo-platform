@@ -3,6 +3,7 @@ Platform configuration and state management.
 """
 import json
 import os
+import secrets
 from pathlib import Path
 
 PLATFORM_DIR = Path(os.environ.get("PLATFORM_DIR", "/root/odoo-platform"))
@@ -30,6 +31,11 @@ DEFAULT_CONFIG = {
     },
     "instances": {},
     "clients": {},
+    "auth": {
+        "google_client_id": "",
+        "google_client_secret": "",
+        "session_secret": "",
+    },
 }
 
 
@@ -70,6 +76,18 @@ def migrate_config(config: dict) -> dict:
         if "version" not in inst:
             inst["version"] = "19"
             changed = True
+
+    # Add auth section if missing
+    if "auth" not in config:
+        config["auth"] = DEFAULT_CONFIG["auth"].copy()
+        changed = True
+
+    # Auto-generate session_secret if empty
+    auth = config.get("auth", {})
+    if not auth.get("session_secret"):
+        auth["session_secret"] = secrets.token_hex(32)
+        config["auth"] = auth
+        changed = True
 
     if changed:
         save_config(config)

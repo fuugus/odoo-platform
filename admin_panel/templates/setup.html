@@ -23,6 +23,26 @@
         </small>
     </div>
     <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
+
+    <h3 style="margin-top: 24px;">Authentication (Google OAuth)</h3>
+    <div class="form-row">
+        <label for="google_client_id">Google Client ID:</label>
+        <input type="text" id="google_client_id" value="{{ config.auth.google_client_id }}" placeholder="123456789.apps.googleusercontent.com">
+    </div>
+    <div class="form-row">
+        <label for="google_client_secret">Google Client Secret:</label>
+        <input type="password" id="google_client_secret" value="{{ config.auth.google_client_secret }}" placeholder="GOCSPX-...">
+        <small style="color: var(--text-muted); font-size: 12px; line-height: 1.5;">
+            Create OAuth credentials at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: var(--primary);">Google Cloud Console</a>.
+            Set the authorized redirect URI to <code>https://admin.{{ config.domain }}/auth/callback</code>
+        </small>
+    </div>
+    <div style="display: flex; gap: 8px;">
+        <button class="btn btn-primary" onclick="saveAuth()">Save Auth Settings</button>
+        {% if config.auth.google_client_id %}
+        <button class="btn btn-danger" onclick="removeAuth()">Remove Auth</button>
+        {% endif %}
+    </div>
 </div>
 
 <div class="setup-steps">
@@ -80,6 +100,31 @@ async function saveConfig() {
     });
     if (resp.ok) {
         showToast('Configuration saved');
+    }
+}
+
+async function saveAuth() {
+    const google_client_id = document.getElementById('google_client_id').value.trim();
+    const google_client_secret = document.getElementById('google_client_secret').value.trim();
+    const resp = await fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            auth: { google_client_id, google_client_secret }
+        })
+    });
+    if (resp.ok) {
+        showToast('Auth settings saved');
+        location.reload();
+    }
+}
+
+async function removeAuth() {
+    if (!confirm('Remove Google OAuth? The panel will be open without authentication.')) return;
+    const resp = await fetch('/api/auth/remove', { method: 'POST' });
+    if (resp.ok) {
+        showToast('Authentication removed');
+        location.reload();
     }
 }
 
