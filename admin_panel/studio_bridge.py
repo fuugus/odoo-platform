@@ -668,40 +668,27 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
                     (x_model_ids,)
                 )
 
-        # For views: delete the module's duplicate views and ownership records
-        # (the original studio_customization records still exist)
+        # For views: return ownership to studio_customization.
+        # If studio_customization already has an entry (dual ownership from before
+        # the fix), delete the module's entry. Otherwise transfer it back.
         if view_records:
-            view_res_ids = [r["res_id"] for r in view_records]
             view_data_ids = [r["id"] for r in view_records]
-            # Check which views are duplicates (studio_customization original still exists)
             cur.execute("""
-                SELECT res_id FROM ir_model_data
-                WHERE module = 'studio_customization' AND model = 'ir.ui.view'
-                AND res_id != ALL(%s)
-                AND name IN (SELECT name FROM ir_model_data WHERE id = ANY(%s))
-            """, (view_res_ids, view_data_ids))
-            original_exists = {r["res_id"] for r in cur.fetchall()}
-            # Delete duplicate views created by module install
-            cur.execute("""
-                SELECT d.res_id FROM ir_model_data d
+                DELETE FROM ir_model_data d
                 WHERE d.id = ANY(%s)
-                AND EXISTS (
-                    SELECT 1 FROM ir_model_data o
-                    WHERE o.module = 'studio_customization'
-                    AND o.model = 'ir.ui.view'
-                    AND o.name = d.name
-                    AND o.res_id != d.res_id
-                )
+                  AND EXISTS (
+                      SELECT 1 FROM ir_model_data s
+                      WHERE s.module = 'studio_customization' AND s.model = 'ir.ui.view'
+                        AND s.name = d.name
+                  )
             """, (view_data_ids,))
-            dup_view_ids = [r["res_id"] for r in cur.fetchall()]
-            if dup_view_ids:
-                await ws(f"Removing {len(dup_view_ids)} duplicate view(s) created by module install...")
-                cur.execute("DELETE FROM ir_ui_view WHERE id = ANY(%s)", (dup_view_ids,))
-            await ws(f"Removing {len(view_data_ids)} view ownership record(s)...")
-            cur.execute(
-                "DELETE FROM ir_model_data WHERE id = ANY(%s)",
-                (view_data_ids,)
-            )
+            deleted_views = cur.rowcount
+            cur.execute("""
+                UPDATE ir_model_data SET module = 'studio_customization'
+                WHERE id = ANY(%s)
+            """, (view_data_ids,))
+            transferred_views = cur.rowcount
+            await ws(f"  Views: {deleted_views} returned (dual ownership), {transferred_views} transferred back")
 
         # Delete duplicate access rules created by module install
         if access_records:
@@ -806,24 +793,46 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
         )
         await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws)
 
-    # Run odoo-bin (--logfile= forces output to stdout instead of conf logfile)
+    # Run odoo-bin (--logfile= forces output to stdout instead of conf logfile).
+    # odoo-bin may exit non-zero on warnings even if the install succeeds,
+    # so we catch errors and check module state before proceeding.
     odoo_bin = f"{base}/odoo/odoo-bin"
     await ws(f"Running odoo-bin {flag} {module_name}...")
-    await run_cmd(
-        f"su - odoo -s /bin/bash -c '{base}/venv/bin/python {odoo_bin} "
-        f"-c {conf_path} {flag} {module_name} --stop-after-init "
-        f"--no-http --logfile= 2>&1'",
-        ws,
-    )
+    odoo_ok = True
+    try:
+        await run_cmd(
+            f"su - odoo -s /bin/bash -c '{base}/venv/bin/python {odoo_bin} "
+            f"-c {conf_path} {flag} {module_name} --stop-after-init "
+            f"--no-http --logfile= 2>&1'",
+            ws,
+        )
+    except RuntimeError as e:
+        await ws(f"odoo-bin exited with error: {e}")
+        odoo_ok = False
 
-    # Post-install: claim custom model fields/models from studio_customization.
-    # Odoo doesn't take ownership of fields on custom models (x_*) during install
-    # because they already exist with studio_customization ownership.
-    await ws("Claiming custom model ownership...")
+    # Post-install: claim ownership and clean up dual ir_model_data entries.
+    # Odoo's install creates ir_model_data for the module alongside existing
+    # studio_customization entries, but doesn't take full ownership of custom
+    # model fields/models — we need to fix that up.
     conn = get_db_connection(db_name)
     cur = conn.cursor()
 
-    # Transfer custom model field ownership
+    # Verify module actually got installed
+    cur.execute("SELECT state FROM ir_module_module WHERE name = %s", (module_name,))
+    mod_row = cur.fetchone()
+    if not mod_row or mod_row[0] != "installed":
+        cur.close()
+        conn.close()
+        if not odoo_ok:
+            raise RuntimeError(f"odoo-bin failed and module {module_name} is not installed")
+        raise RuntimeError(f"Module {module_name} state is {mod_row[0] if mod_row else 'not found'}")
+
+    if not odoo_ok:
+        await ws(f"Module {module_name} is installed despite exit code — proceeding with post-install")
+
+    await ws("Post-install: claiming ownership...")
+
+    # Transfer custom model field ownership from studio_customization to module
     cur.execute("""
         UPDATE ir_model_data SET module = %s
         WHERE module = 'studio_customization'
@@ -836,7 +845,7 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     """, (module_name,))
     claimed_fields = cur.rowcount
 
-    # Set those fields to state=base
+    # Set all module-owned fields to state=base
     cur.execute("""
         UPDATE ir_model_fields SET state = 'base'
         WHERE state = 'manual'
@@ -846,7 +855,7 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
           )
     """, (module_name,))
 
-    # Transfer custom model ownership
+    # Transfer custom model ownership from studio_customization to module
     cur.execute("""
         UPDATE ir_model_data SET module = %s
         WHERE module = 'studio_customization'
@@ -857,7 +866,7 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     """, (module_name,))
     claimed_models = cur.rowcount
 
-    # Set custom models to state=base
+    # Set all module-owned models to state=base
     cur.execute("""
         UPDATE ir_model SET state = 'base'
         WHERE state = 'manual'
@@ -867,10 +876,23 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
           )
     """, (module_name,))
 
+    # Clean up dual view ownership: Odoo's install creates ir_model_data entries
+    # for the module pointing to the SAME views as studio_customization (same res_id).
+    # Delete the redundant studio_customization entries.
+    cur.execute("""
+        DELETE FROM ir_model_data WHERE module = 'studio_customization'
+          AND model = 'ir.ui.view'
+          AND name IN (
+              SELECT name FROM ir_model_data
+              WHERE module = %s AND model = 'ir.ui.view'
+          )
+    """, (module_name,))
+    cleaned_views = cur.rowcount
+
     conn.commit()
     cur.close()
     conn.close()
-    await ws(f"  Claimed {claimed_fields} field(s), {claimed_models} model(s) from Studio")
+    await ws(f"  Claimed {claimed_fields} field(s), {claimed_models} model(s), cleaned {cleaned_views} view ownership(s)")
 
     # Start instance
     await ws(f"Starting {service}...")
