@@ -1,0 +1,1 @@
+{'name': 'Kaminfeger Base', 'summary': 'Studio field definitions for kaminfeger', 'version': '1.0.0', 'category': 'Technical', 'depends': ['hr'], 'data': ['security/ir.model.access.csv', 'views/studio_views.xml'], 'license': 'LGPL-3', 'installable': True}

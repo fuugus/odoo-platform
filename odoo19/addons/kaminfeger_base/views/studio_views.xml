@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="default_form_view_fo_a1fb3fd8-c457-49ce-aad4-2ad50064d939" model="ir.ui.view">
+        <field name="name">Default form view for x_abschluss</field>
+        <field name="model">x_abschluss</field>
+        <field name="type">form</field>
+        <field name="arch" type="xml">
+            <form>
+                                                                                                                                                                                                  <header/>
+                                                                                                                                                                                                  <sheet string="Abschluss">
+                                                                                                                                                                                                    <widget name="web_ribbon" text="Archiviert" bg_color="text-bg-danger" invisible="x_active"/>
+                                                                                                                                                                                                    <field name="x_active" invisible="1"/>
+                                                                                                                                                                                                    <div class="oe_title">
+                                                                                                                                                                                                                <h1>
+                                                                                                                                                                                                                    <field name="x_name" required="1" placeholder="Name..."/>
+                                                                                                                                                                                                                </h1>
+                                                                                                                                                                                                            </div>
+                                                                                                                                                                                                    <group name="studio_group_c70b0e">
+                                                                                                                                                                                                      <group name="studio_group_c70b0e_left"/>
+                                                                                                                                                                                                      <group name="studio_group_c70b0e_right"/>
+                                                                                                                                                                                                    </group>
+                                                                                                                                                                                                  </sheet>
+                                                                                                                                                                                                  <chatter/>
+                                                                                                                                                                                                </form>
+        </field>
+    </record>
+
+    <record id="default_list_view_fo_ae50a314-03bf-4bfe-9a86-5ec1f794674e" model="ir.ui.view">
+        <field name="name">Default list view for x_abschluss</field>
+        <field name="model">x_abschluss</field>
+        <field name="type">list</field>
+        <field name="arch" type="xml">
+            <list default_order="x_studio_sequence asc,id desc">
+                                                                                                                                                                                                  <field name="x_studio_sequence" widget="handle"/>
+                                                                                                                                                                                                  <field name="x_name"/>
+                                                                                                                                                                                                </list>
+        </field>
+    </record>
+
+    <record id="default_search_view__d028a1b1-c3a4-4370-9e65-bd58a84fc9b9" model="ir.ui.view">
+        <field name="name">Default search view for x_abschluss</field>
+        <field name="model">x_abschluss</field>
+        <field name="type">search</field>
+        <field name="arch" type="xml">
+            <search>
+                                                                                                                                                                                                  <field name="x_name"/>
+                                                                                                                                                                                                  <separator/>
+                                                                                                                                                                                                  <filter string="Archiviert" name="archived_x_abschluss" domain="[['x_active', '=', False]]"/>
+                                                                                                                                                                                                  <separator/>
+                                                                                                                                                                                                </search>
+        </field>
+    </record>
+
+    <record id="default_form_view_fo_4fd30e8e-1f93-4ba5-87b6-bb53868961be" model="ir.ui.view">
+        <field name="name">Default form view for x_datei</field>
+        <field name="model">x_datei</field>
+        <field name="type">form</field>
+        <field name="arch" type="xml">
+            <form>
+                                                                                                                                                                                                  <header/>
+                                                                                                                                                                                                  <sheet string="Datei">
+                                                                                                                                                                                                    <widget name="web_ribbon" text="Archiviert" bg_color="text-bg-danger" invisible="x_active"/>
+                                                                                                                                                                                                    <field name="x_active" invisible="1"/>
+                                                                                                                                                                                                    <div class="oe_title">
+                                                                                                                                                                                                                <h1>
+                                                                                                                                                                                                                    <field name="x_name" required="1" placeholder="Name..."/>
+                                                                                                                                                                                                                </h1>
+                                                                                                                                                                                                            </div>
+                                                                                                                                                                                                    <group name="studio_group_dfc5b5">
+                                                                                                                                                                                                      <group name="studio_group_dfc5b5_left"/>
+                                                                                                                                                                                                      <group name="studio_group_dfc5b5_right"/>
+                                                                                                                                                                                                    </group>
+                                                                                                                                                                                                  </sheet>
+                                                                                                                                                                                                  <chatter/>
+                                                                                                                                                                                                </form>
+        </field>
+    </record>
+
+    <record id="default_list_view_fo_a42deb7a-230d-4408-9006-e5f6595b917d" model="ir.ui.view">
+        <field name="name">Default list view for x_datei</field>
+        <field name="model">x_datei</field>
+        <field name="type">list</field>
+        <field name="arch" type="xml">
+            <list default_order="x_studio_sequence asc,id desc">
+                                                                                                                                                                                                  <field name="x_studio_sequence" widget="handle"/>
+                                                                                                                                                                                                  <field name="x_name"/>
+                                                                                                                                                                                                </list>
+        </field>
+    </record>
+
+    <record id="default_search_view__325a39bb-e4a3-4775-911f-b6f9c3423c09" model="ir.ui.view">
+        <field name="name">Default search view for x_datei</field>
+        <field name="model">x_datei</field>
+        <field name="type">search</field>
+        <field name="arch" type="xml">
+            <search>
+                                                                                                                                                                                                  <field name="x_name"/>
+                                                                                                                                                                                                  <separator/>
+                                                                                                                                                                                                  <filter string="Archiviert" name="archived_x_datei" domain="[['x_active', '=', False]]"/>
+                                                                                                                                                                                                  <separator/>
+                                                                                                                                                                                                </search>
+        </field>
+    </record>
+
+    <record id="default_form_view_fo_75c2df24-8fd4-46ba-bf91-fcc014850bf4" model="ir.ui.view">
+        <field name="name">Default form view for x_kategorie</field>
+        <field name="model">x_kategorie</field>
+        <field name="type">form</field>
+        <field name="arch" type="xml">
+            <form>
+                                                                                                                                                                                                  <header/>
+                                                                                                                                                                                                  <sheet string="Kategorie">
+                                                                                                                                                                                                    <widget name="web_ribbon" text="Archiviert" bg_color="text-bg-danger" invisible="x_active"/>
+                                                                                                                                                                                                    <field name="x_active" invisible="1"/>
+                                                                                                                                                                                                    <div class="oe_title">
+                                                                                                                                                                                                                <h1>
+                                                                                                                                                                                                                    <field name="x_name" required="1" placeholder="Name..."/>
+                                                                                                                                                                                                                </h1>
+                                                                                                                                                                                                            </div>
+                                                                                                                                                                                                    <group name="studio_group_b52e12">
+                                                                                                                                                                                                      <group name="studio_group_b52e12_left"/>
+                                                                                                                                                                                                      <group name="studio_group_b52e12_right"/>
+                                                                                                                                                                                                    </group>
+                                                                                                                                                                                                  </sheet>
+                                                                                                                                                                                                  <chatter/>
+                                                                                                                                                                                                </form>
+        </field>
+    </record>
+
+    <record id="default_list_view_fo_81c8ae9f-1ecb-492a-baf5-54c610104a6d" model="ir.ui.view">
+        <field name="name">Default list view for x_kategorie</field>
+        <field name="model">x_kategorie</field>
+        <field name="type">list</field>
+        <field name="arch" type="xml">
+            <list default_order="x_studio_sequence asc,id desc">
+                                                                                                                                                                                                  <field name="x_studio_sequence" widget="handle"/>
+                                                                                                                                                                                                  <field name="x_name"/>
+                                                                                                                                                                                                </list>
+        </field>
+    </record>
+
+    <record id="default_search_view__5012626a-e711-454e-b2a5-a6ea23b16ad0" model="ir.ui.view">
+        <field name="name">Default search view for x_kategorie</field>
+        <field name="model">x_kategorie</field>
+        <field name="type">search</field>
+        <field name="arch" type="xml">
+            <search>
+                                                                                                                                                                                                  <field name="x_name"/>
+                                                                                                                                                                                                  <separator/>
+                                                                                                                                                                                                  <filter string="Archiviert" name="archived_x_kategorie" domain="[['x_active', '=', False]]"/>
+                                                                                                                                                                                                  <separator/>
+                                                                                                                                                                                                </search>
+        </field>
+    </record>
+
+    <record id="odoo_studio_hr_emplo_4f2afd2d-88b9-4b14-9077-0b878c8dcbd0" model="ir.ui.view">
+        <field name="name">Odoo Studio: hr.employee.form customization</field>
+        <field name="model">hr.employee</field>
+        <field name="type">form</field>
+        <field name="priority">10000</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <data>
+                                                                                                                                                                                                  <xpath expr="/form//field[@name='name']" position="after">
+                                                                                                                                                                                                    <field name="x_studio_hover_bild" widget="image" class="oe_avatar ml-3 h4"/>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                  <xpath expr="/form//field[@name='parent_id']" position="after">
+                                                                                                                                                                                                    <field widget="image" name="x_studio_hover_bild" invisible="True"/>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                </data>
+        </field>
+    </record>
+
+    <record id="odoo_studio_res_coun_b89957c3-b039-4b4a-a35f-ef39b85a7283" model="ir.ui.view">
+        <field name="name">Odoo Studio: res.country.state.form customization</field>
+        <field name="model">res.country.state</field>
+        <field name="type">form</field>
+        <field name="priority">99</field>
+        <field name="inherit_id" ref="base.view_country_state_form"/>
+        <field name="arch" type="xml">
+            <data>
+                                                                                                                                                                                                  <xpath expr="/form//field[@name='country_id']" position="after">
+                                                                                                                                                                                                    <field name="x_studio_webseite_beschreibung"/>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                </data>
+        </field>
+    </record>
+
+    <record id="odoo_studio_res_part_6b0631b0-2f44-4d2e-8d5e-7d6331c11c30" model="ir.ui.view">
+        <field name="name">Odoo Studio: res.partner.form customization</field>
+        <field name="model">res.partner</field>
+        <field name="type">form</field>
+        <field name="priority">360</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <data>
+                                                                                                                                                                                                  <xpath expr="/form//page[@name='internal_notes']" position="after">
+                                                                                                                                                                                                    <page string="Kaminfeger" name="studio_page_lr_1jf3hc9ev" invisible="False">
+                                                                                                                                                                                                      <group name="studio_group_lr">
+                                                                                                                                                                                                        <group name="studio_group_lr_left">
+                                                                                                                                                                                                          <field name="x_studio_feuko_nummer" invisible="company_type == &quot;company&quot;"/>
+                                                                                                                                                                                                          <field name="x_studio_mitgliedernummer" options="{&quot;enable_formatting&quot;:false}"/>
+                                                                                                                                                                                                          <field name="x_studio_mitgliedstatus"/>
+                                                                                                                                                                                                          <field name="x_studio_ist_kaminfeger_unternehmen" invisible="company_type == &quot;person&quot;"/>
+                                                                                                                                                                                                          <field name="x_studio_ist_lehrbetrieb" invisible="company_type == &quot;person&quot;"/>
+                                                                                                                                                                                                          <field name="x_studio_ist_lehrling" invisible="company_type == &quot;company&quot;"/>
+                                                                                                                                                                                                          <field name="x_studio_lehrstart" invisible="company_type == &quot;company&quot; or not x_studio_ist_lehrling"/>
+                                                                                                                                                                                                          <field name="x_studio_status_lehre" invisible="company_type == &quot;company&quot; or not x_studio_ist_lehrling"/>
+                                                                                                                                                                                                          <field name="x_studio_geburtsdatum" invisible="company_type == &quot;company&quot;" options="{&quot;warn_future&quot;:true}"/>
+                                                                                                                                                                                                          <field name="x_studio_heimatort" invisible="company_type == &quot;company&quot;"/>
+                                                                                                                                                                                                          <field name="x_studio_abschlusse" invisible="company_type == &quot;company&quot;"/>
+                                                                                                                                                                                                        </group>
+                                                                                                                                                                                                        <group name="studio_group_lr_right"/>
+                                                                                                                                                                                                      </group>
+                                                                                                                                                                                                    </page>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                </data>
+        </field>
+    </record>
+
+    <record id="odoo_studio_default__b2887221-419e-4478-8942-1c8859c32b76" model="ir.ui.view">
+        <field name="name">Odoo Studio: Default form view for x_abschluss customization</field>
+        <field name="model">x_abschluss</field>
+        <field name="type">form</field>
+        <field name="priority">99</field>
+        <field name="inherit_id" ref="default_form_view_fo_a1fb3fd8-c457-49ce-aad4-2ad50064d939"/>
+        <field name="arch" type="xml">
+            <data>
+                                                                                                                                                                                                  <xpath expr="/form//field[@name='x_name']" position="attributes">
+                                                                                                                                                                                                    <attribute name="string">Abschluss</attribute>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                </data>
+        </field>
+    </record>
+
+    <record id="odoo_studio_default__45ecb610-b9eb-4463-9e29-608443301219" model="ir.ui.view">
+        <field name="name">Odoo Studio: Default form view for x_datei customization</field>
+        <field name="model">x_datei</field>
+        <field name="type">form</field>
+        <field name="priority">99</field>
+        <field name="inherit_id" ref="default_form_view_fo_4fd30e8e-1f93-4ba5-87b6-bb53868961be"/>
+        <field name="arch" type="xml">
+            <data>
+                                                                                                                                                                                                  <xpath expr="/form//field[@name='x_name']" position="attributes">
+                                                                                                                                                                                                    <attribute name="string">Dateiname</attribute>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                  <xpath expr="/form//group[@name='studio_group_dfc5b5_left']" position="inside">
+                                                                                                                                                                                                    <field widget="file" filename="x_studio_datei_filename" name="x_studio_datei" required="True"/>
+                                                                                                                                                                                                    <field name="x_studio_nur_fur_mitglieder"/>
+                                                                                                                                                                                                    <field name="x_studio_kategorie" options="{'create_name_field': 'x_name'}" required="True"/>
+                                                                                                                                                                                                    <field widget="file" invisible="True" name="x_studio_datei_filename"/>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                </data>
+        </field>
+    </record>
+
+    <record id="odoo_studio_default__a2f35bc8-5de3-48ad-b028-ddd3b82e1a11" model="ir.ui.view">
+        <field name="name">Odoo Studio: Default form view for x_kategorie customization</field>
+        <field name="model">x_kategorie</field>
+        <field name="type">form</field>
+        <field name="priority">99</field>
+        <field name="inherit_id" ref="default_form_view_fo_75c2df24-8fd4-46ba-bf91-fcc014850bf4"/>
+        <field name="arch" type="xml">
+            <data>
+                                                                                                                                                                                                  <xpath expr="/form//field[@name='x_active']" position="after">
+                                                                                                                                                                                                    <field name="x_avatar_image" widget="image" class="oe_avatar ml-3 mr-3" string="Kategorie Bild"/>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                  <xpath expr="/form//group[@name='studio_group_b52e12_left']" position="inside">
+                                                                                                                                                                                                    <field name="x_studio_ubergeordnete_kategorie" options="{'create_name_field': 'x_name'}"/>
+                                                                                                                                                                                                  </xpath>
+                                                                                                                                                                                                </data>
+        </field>
+    </record>
+
+</odoo>
