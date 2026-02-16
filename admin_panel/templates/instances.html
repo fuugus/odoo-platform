@@ -70,7 +70,7 @@
                 <td><a href="https://{{ fqdn }}" target="_blank">{% if inst.workers | default(0) > 0 %}{{ inst.port }}/{{ inst.port + 1 }}{% else %}{{ inst.port }}{% endif %}</a></td>
                 <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}"></td>
                 <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/database/manager')" title="Copy PW & open DB manager">{{ inst.master_pw | default('–') }}</span></td>
-                <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/login')" title="Copy PW & open Odoo">{{ inst.admin_pw | default('–') }}</span></td>
+                <td id="adminpw-{{ name }}"><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/login')" title="Copy PW & open Odoo">{{ inst.admin_pw | default('–') }}</span></td>
                 <td id="cust-{{ name }}"><span style="color:var(--text-muted)">...</span></td>
                 <td id="status-{{ name }}">
                     <a href="https://{{ fqdn }}" target="_blank">
@@ -306,6 +306,33 @@ StatusPoller.init(function(data, pending) {
             }
             html += '</a>';
             cell.innerHTML = html;
+        }
+    } catch (e) {}
+})();
+
+(async function checkAdminPasswords() {
+    try {
+        const resp = await fetch('/api/instances/admin-pw-status');
+        const data = await resp.json();
+        for (const [name, info] of Object.entries(data)) {
+            const cell = document.getElementById('adminpw-' + name);
+            if (!cell || info.match) continue;
+            const pwSpan = cell.querySelector('.pw-value');
+            if (!pwSpan) continue;
+            const fqdn = pwSpan.getAttribute('onclick')?.match(/https:\/\/[^']+/)?.[0] || '';
+            cell.innerHTML = '<a href="#" class="pw-reset-link" title="Password does not match DB — click to generate a new one">reset</a>';
+            cell.querySelector('.pw-reset-link').onclick = async function(e) {
+                e.preventDefault();
+                try {
+                    const r = await fetch(`/api/instances/${name}/reset-admin-pw`, {method: 'POST'});
+                    if (!r.ok) { showToast('Reset failed', 'error'); return; }
+                    const result = await r.json();
+                    cell.innerHTML = `<span class="pw-value" onclick="copyAndOpen(this, '${fqdn}')" title="Copy PW &amp; open Odoo">${result.admin_pw}</span>`;
+                    showToast('Admin password reset');
+                } catch (err) {
+                    showToast('Reset failed', 'error');
+                }
+            };
         }
     } catch (e) {}
 })();

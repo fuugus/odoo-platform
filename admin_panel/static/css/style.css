@@ -464,6 +464,15 @@ input:focus, select:focus {
     color: inherit;
     text-decoration: none;
 }
+.pw-reset-link {
+    font-size: 11px;
+    color: var(--danger);
+    text-decoration: none;
+    font-weight: 500;
+}
+.pw-reset-link:hover {
+    text-decoration: underline;
+}
 
 /* ─── Badges ─────────────────────────────────────────────────────────────── */
 

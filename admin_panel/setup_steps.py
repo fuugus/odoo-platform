@@ -670,11 +670,15 @@ WantedBy=multi-user.target
         if ws_send:
             await ws_send("Database already initialized, skipping")
 
-    # Set admin user password
+    # Set admin user password and normalize superuser
     if ws_send:
         await ws_send("Setting admin user password...")
     await run_cmd(
-        f"su - postgres -c \"psql -d {db_name} -c \\\"UPDATE res_users SET password='{admin_pw}' WHERE id=2\\\"\"",
+        f"su - postgres -c \"psql -d {db_name} -c \\\"UPDATE res_users SET password='{admin_pw}', login='admin' WHERE id=2\\\"\"",
+        ws_send,
+    )
+    await run_cmd(
+        f"su - postgres -c \"psql -d {db_name} -c \\\"UPDATE res_partner SET name='Admin' WHERE id=(SELECT partner_id FROM res_users WHERE id=2)\\\"\"",
         ws_send,
     )
 
@@ -852,6 +856,24 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
         f"neutralize -d {target_db} -c {target_conf} --stop-after-init\"",
         ws_send,
     )
+
+    # Check/reset admin password after clone
+    from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser
+    stored_pw = target.get("admin_pw", "")
+    if stored_pw and verify_admin_pw(target_db, stored_pw):
+        if ws_send:
+            await ws_send("Admin password matches — keeping existing password")
+        normalize_superuser(target_db)
+    else:
+        new_pw = _generate_password()
+        if ws_send:
+            await ws_send("Admin password mismatch — setting new password")
+        reset_admin_pw(target_db, new_pw)
+        config = load_config()
+        config["instances"][instance_name]["admin_pw"] = new_pw
+        save_config(config)
+    if ws_send:
+        await ws_send("Superuser normalized: login=admin, name=Admin")
 
     # Start target instance
     if ws_send:

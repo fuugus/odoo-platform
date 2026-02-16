@@ -25,7 +25,9 @@ from setup_steps import (
     SETUP_STEPS, STEP_ORDER, STEP_DEPS, VERSION_STEPS,
     is_step_unlocked, get_installed_versions, odoo_base_dir,
     create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd,
+    _generate_password,
 )
+from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser
 from studio_bridge import (
     get_custom_addons_info, get_instance_addons, get_studio_stats,
     export_studio_to_module, convert_module_to_studio, install_or_upgrade_module,
@@ -467,6 +469,42 @@ async def api_update_instance(instance_name: str, request: Request):
         save_config(config)
 
     return {"status": "ok"}
+
+
+@app.get("/api/instances/admin-pw-status")
+async def api_admin_pw_status():
+    """Check if stored admin_pw matches DB for all instances."""
+    config = load_config()
+    result = {}
+    for name, inst in config.get("instances", {}).items():
+        db_name = inst.get("db_name", name)
+        stored_pw = inst.get("admin_pw", "")
+        if not stored_pw:
+            result[name] = {"match": False}
+            continue
+        result[name] = {"match": verify_admin_pw(db_name, stored_pw)}
+    return result
+
+
+@app.post("/api/instances/{instance_name}/reset-admin-pw")
+async def api_reset_admin_pw(instance_name: str):
+    """Generate a new admin password, write to DB, update platform.json."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    db_name = instance.get("db_name", instance_name)
+    new_pw = _generate_password()
+
+    try:
+        reset_admin_pw(db_name, new_pw)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reset password: {e}")
+
+    instance["admin_pw"] = new_pw
+    save_config(config)
+    return {"status": "ok", "admin_pw": new_pw}
 
 
 @app.get("/api/databases")

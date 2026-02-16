@@ -44,7 +44,8 @@ pip install --quiet \
     websockets==14.* \
     httpx==0.28.* \
     psutil==6.* \
-    itsdangerous==2.*
+    itsdangerous==2.* \
+    passlib==1.7.*
 echo "  ✓ Python dependencies installed"
 
 # 4. Create systemd service for admin panel
