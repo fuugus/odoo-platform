@@ -31,7 +31,7 @@
                                                     </a> -->
 
                                                     <a t-att-href="post.website_url" style="text-decoration: none;">
-                                                        <div t-attf-style="background-image: url('#{post_image}'); height: 200px; background-size: cover; background-position: center;" 
+                                                        <div t-attf-style="#{'background-image: url(\'' + post_image + '\');' if post_image and post_image != 'none' else ''} height: 200px; background-size: cover; background-position: center;"
                                                             class="news-img">
                                                             <t t-if="not post_image or post_image == 'none'">
                                                                 <div class="h-100 w-100 d-flex align-items-center justify-content-center bg-light">
