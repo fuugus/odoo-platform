@@ -499,22 +499,27 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
 
         # security/ir.model.access.csv
         if access_rules:
-            # Look up existing ir_model_data for each model to get correct external IDs
+            # Build model external ID references. Custom models (x_*) use
+            # module-relative IDs (model_x_abschluss) since the module defines
+            # them. Standard models use their existing external IDs.
             model_xmlid_map = {}
             for rule in access_rules:
                 model_name = rule["model"]
                 if model_name not in model_xmlid_map:
-                    cur.execute("""
-                        SELECT module, name FROM ir_model_data
-                        WHERE model = 'ir.model' AND res_id = (
-                            SELECT id FROM ir_model WHERE model = %s LIMIT 1
-                        ) LIMIT 1
-                    """, (model_name,))
-                    row = cur.fetchone()
-                    if row:
-                        model_xmlid_map[model_name] = f"{row['module']}.{row['name']}"
-                    else:
+                    if model_name.startswith("x_"):
                         model_xmlid_map[model_name] = f"model_{model_name.replace('.', '_')}"
+                    else:
+                        cur.execute("""
+                            SELECT module, name FROM ir_model_data
+                            WHERE model = 'ir.model' AND res_id = (
+                                SELECT id FROM ir_model WHERE model = %s LIMIT 1
+                            ) LIMIT 1
+                        """, (model_name,))
+                        row = cur.fetchone()
+                        if row:
+                            model_xmlid_map[model_name] = f"{row['module']}.{row['name']}"
+                        else:
+                            model_xmlid_map[model_name] = f"model_{model_name.replace('.', '_')}"
 
             csv_lines = ["id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink"]
             for rule in access_rules:
@@ -532,16 +537,23 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
 
         # views/studio_views.xml
         if studio_views:
+            # Build lookup: for views whose parent has no ir_model_data,
+            # find a matching base view in our export set (same model+type, no inherit_id)
+            export_base_views = {}
+            for v in studio_views:
+                if not v.get("inherit_id"):
+                    export_base_views[(v["model"], v["type"])] = v["xmlid_name"]
+
+            # Sort: base views first, then inheritance views
+            sorted_views = sorted(studio_views, key=lambda v: (1 if v.get("inherit_id") else 0, v["model"], v["name"]))
+
             xml_lines = ['<?xml version="1.0" encoding="utf-8"?>', "<odoo>"]
-            for view in studio_views:
+            skipped = 0
+            for view in sorted_views:
                 arch = _t(view["arch_db"])
-                xml_lines.append(f"")
-                xml_lines.append(f"    <record id=\"{view['xmlid_name']}\" model=\"ir.ui.view\">")
-                xml_lines.append(f"        <field name=\"name\">{view['name']}</field>")
-                xml_lines.append(f"        <field name=\"model\">{view['model']}</field>")
-                xml_lines.append(f"        <field name=\"type\">{view['type']}</field>")
-                if view.get("priority") and view["priority"] != 16:
-                    xml_lines.append(f"        <field name=\"priority\">{view['priority']}</field>")
+
+                # Resolve inherit_id
+                parent_ref = None
                 if view.get("inherit_id"):
                     cur.execute("""
                         SELECT module || '.' || name FROM ir_model_data
@@ -550,16 +562,47 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
                     parent_row = cur.fetchone()
                     if parent_row:
                         parent_xmlid = list(parent_row.values())[0]
-                        xml_lines.append(f'        <field name="inherit_id" ref="{parent_xmlid}"/>')
+                        # If parent is in our own module, use local ref
+                        if parent_xmlid.startswith("studio_customization."):
+                            local_name = parent_xmlid.split(".", 1)[1]
+                            if any(v["xmlid_name"] == local_name for v in studio_views):
+                                parent_ref = local_name
+                            else:
+                                parent_ref = parent_xmlid
+                        else:
+                            parent_ref = parent_xmlid
+                    else:
+                        # Parent has no ir_model_data — find matching base view in our export
+                        key = (view["model"], view["type"])
+                        if key in export_base_views:
+                            parent_ref = export_base_views[key]
+                            await ws(f"  Re-parenting {view['xmlid_name']} → {parent_ref}")
+                        else:
+                            await ws(f"  WARNING: Skipping {view['xmlid_name']} — parent view has no xmlid")
+                            skipped += 1
+                            continue
+
+                xml_lines.append(f"")
+                xml_lines.append(f"    <record id=\"{view['xmlid_name']}\" model=\"ir.ui.view\">")
+                xml_lines.append(f"        <field name=\"name\">{view['name']}</field>")
+                xml_lines.append(f"        <field name=\"model\">{view['model']}</field>")
+                xml_lines.append(f"        <field name=\"type\">{view['type']}</field>")
+                if view.get("priority") and view["priority"] != 16:
+                    xml_lines.append(f"        <field name=\"priority\">{view['priority']}</field>")
+                if parent_ref:
+                    xml_lines.append(f'        <field name="inherit_id" ref="{parent_ref}"/>')
                 xml_lines.append(f"        <field name=\"arch\" type=\"xml\">")
-                for arch_line in arch.strip().splitlines():
-                    xml_lines.append(f"            {arch_line}")
+                arch_lines = arch.strip().splitlines()
+                arch_text = textwrap.dedent("\n".join(arch_lines))
+                for arch_line in arch_text.splitlines():
+                    xml_lines.append(f"            {arch_line}" if arch_line.strip() else "")
                 xml_lines.append(f"        </field>")
                 xml_lines.append(f"    </record>")
             xml_lines.append("")
             xml_lines.append("</odoo>")
             (views_dir / "studio_views.xml").write_text("\n".join(xml_lines) + "\n")
-            await ws(f"  views/studio_views.xml ({len(studio_views)} views)")
+            exported = len(studio_views) - skipped
+            await ws(f"  views/studio_views.xml ({exported} views{f', {skipped} skipped' if skipped else ''})")
 
         # __init__.py
         (module_dir / "__init__.py").write_text("from . import models\n")
@@ -690,14 +733,12 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
             transferred_views = cur.rowcount
             await ws(f"  Views: {deleted_views} returned (dual ownership), {transferred_views} transferred back")
 
-        # Delete duplicate access rules created by module install
+        # Keep access rules alive (don't delete ir_model_access records) so they
+        # survive for re-export. Only delete the ir_model_data ownership entries.
         if access_records:
-            access_res_ids = [r["res_id"] for r in access_records]
-            await ws(f"Removing {len(access_res_ids)} module-created access rule(s)...")
-            cur.execute(
-                "DELETE FROM ir_model_access WHERE id = ANY(%s)",
-                (access_res_ids,)
-            )
+            access_data_ids = [r["id"] for r in access_records]
+            cur.execute("DELETE FROM ir_model_data WHERE id = ANY(%s)", (access_data_ids,))
+            await ws(f"  Access rules: released ownership of {len(access_data_ids)} rule(s)")
 
         # Handle field/model ownership: if studio_customization also owns the
         # same record, delete the module's duplicate. Otherwise transfer back
@@ -721,8 +762,8 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
             transferred = cur.rowcount
             await ws(f"  Ownership: {deleted} returned to Studio (inherited), {transferred} transferred back (custom models)")
 
-        # Delete other ownership records (access rules, etc.)
-        other_data_ids = [r["id"] for r in access_records + other_records]
+        # Delete other ownership records (NOT access rules — handled above)
+        other_data_ids = [r["id"] for r in other_records]
         if other_data_ids:
             await ws(f"Removing {len(other_data_ids)} other ownership record(s)...")
             cur.execute(
@@ -793,6 +834,37 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
         )
         await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws)
 
+    # Pre-install: reclaim studio_customization records and reset states so
+    # odoo-bin can properly initialize the module. Without this:
+    # - Odoo's _reflect skips creating ir_model_data, breaking CSV references
+    # - Manual-state models aren't registered in the ORM registry, breaking views
+    conn = get_db_connection(db_name)
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE ir_model_data SET module = %s
+        WHERE module = 'studio_customization'
+          AND model IN ('ir.ui.view', 'ir.model', 'ir.model.fields')
+    """, (module_name,))
+    pre_count = cur.rowcount
+
+    # Set custom models and their fields to state='base' so Odoo's init_models
+    # registers them in the ORM registry (manual-state models are treated as
+    # dynamic/Studio models and may not be fully initialized during module load).
+    cur.execute("UPDATE ir_model SET state = 'base' WHERE state = 'manual' AND model LIKE 'x\\_%%'")
+    pre_models = cur.rowcount
+    cur.execute("""
+        UPDATE ir_model_fields SET state = 'base'
+        WHERE state = 'manual' AND name LIKE 'x\\_%%'
+          AND id IN (SELECT res_id FROM ir_model_data WHERE module = %s AND model = 'ir.model.fields')
+    """, (module_name,))
+    pre_fields = cur.rowcount
+
+    if pre_count or pre_models:
+        await ws(f"Pre-install: reclaimed {pre_count} record(s), reset {pre_models} model(s) + {pre_fields} field(s) to base")
+    conn.commit()
+    cur.close()
+    conn.close()
+
     # Run odoo-bin (--logfile= forces output to stdout instead of conf logfile).
     # odoo-bin may exit non-zero on warnings even if the install succeeds,
     # so we catch errors and check module state before proceeding.
@@ -832,7 +904,21 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
 
     await ws("Post-install: claiming ownership...")
 
-    # Transfer custom model field ownership from studio_customization to module
+    # Step 1: Clean up dual ownership FIRST — delete studio_customization entries
+    # where the module already has its own entry (from odoo-bin). This must happen
+    # before claiming, otherwise the claim UPDATEs create duplicate module entries.
+    cur.execute("""
+        DELETE FROM ir_model_data s
+        USING ir_model_data m
+        WHERE s.module = 'studio_customization'
+          AND m.module = %s
+          AND s.model = m.model
+          AND s.res_id = m.res_id
+    """, (module_name,))
+    cleaned_duals = cur.rowcount
+
+    # Step 2: Claim remaining studio_customization entries for custom model
+    # fields/models (where odoo-bin didn't create its own entry).
     cur.execute("""
         UPDATE ir_model_data SET module = %s
         WHERE module = 'studio_customization'
@@ -845,17 +931,6 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     """, (module_name,))
     claimed_fields = cur.rowcount
 
-    # Set all module-owned fields to state=base
-    cur.execute("""
-        UPDATE ir_model_fields SET state = 'base'
-        WHERE state = 'manual'
-          AND id IN (
-              SELECT res_id FROM ir_model_data
-              WHERE module = %s AND model = 'ir.model.fields'
-          )
-    """, (module_name,))
-
-    # Transfer custom model ownership from studio_customization to module
     cur.execute("""
         UPDATE ir_model_data SET module = %s
         WHERE module = 'studio_customization'
@@ -866,7 +941,16 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     """, (module_name,))
     claimed_models = cur.rowcount
 
-    # Set all module-owned models to state=base
+    # Step 3: Set all module-owned fields and models to state=base
+    cur.execute("""
+        UPDATE ir_model_fields SET state = 'base'
+        WHERE state = 'manual'
+          AND id IN (
+              SELECT res_id FROM ir_model_data
+              WHERE module = %s AND model = 'ir.model.fields'
+          )
+    """, (module_name,))
+
     cur.execute("""
         UPDATE ir_model SET state = 'base'
         WHERE state = 'manual'
@@ -876,23 +960,22 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
           )
     """, (module_name,))
 
-    # Clean up dual view ownership: Odoo's install creates ir_model_data entries
-    # for the module pointing to the SAME views as studio_customization (same res_id).
-    # Delete the redundant studio_customization entries.
+    # Step 4: Clean orphaned access rules for custom models — these are leftovers
+    # from previous cycles (no ir_model_data) now duplicated by module's CSV rules.
     cur.execute("""
-        DELETE FROM ir_model_data WHERE module = 'studio_customization'
-          AND model = 'ir.ui.view'
-          AND name IN (
-              SELECT name FROM ir_model_data
-              WHERE module = %s AND model = 'ir.ui.view'
+        DELETE FROM ir_model_access a
+        WHERE a.model_id IN (SELECT id FROM ir_model WHERE model LIKE 'x\\_%%')
+          AND NOT EXISTS (
+              SELECT 1 FROM ir_model_data d
+              WHERE d.model = 'ir.model.access' AND d.res_id = a.id
           )
-    """, (module_name,))
-    cleaned_views = cur.rowcount
+    """)
+    cleaned_rules = cur.rowcount
 
     conn.commit()
     cur.close()
     conn.close()
-    await ws(f"  Claimed {claimed_fields} field(s), {claimed_models} model(s), cleaned {cleaned_views} view ownership(s)")
+    await ws(f"  Cleaned {cleaned_duals} dual(s), claimed {claimed_fields} field(s) + {claimed_models} model(s), removed {cleaned_rules} orphan rule(s)")
 
     # Start instance
     await ws(f"Starting {service}...")

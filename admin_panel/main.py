@@ -767,6 +767,13 @@ async def ws_studio_bridge_revert(websocket: WebSocket):
         instance_addons = f"{odoo_base_dir(version)}/data/{instance_name}/addons/{module_name}"
 
         await websocket.send_json({"type": "status", "status": "running"})
+
+        # Stop the instance before modifying the DB — the running Odoo process
+        # detects registry changes and may drop custom models when it sees the
+        # module was uninstalled.
+        await ws_send(f"Stopping {service}...")
+        await run_cmd(f"systemctl stop {service}", ws_send)
+
         await convert_module_to_studio(db_name, client, ws_send)
 
         # Remove deployed copy from instance addons
@@ -774,9 +781,9 @@ async def ws_studio_bridge_revert(websocket: WebSocket):
             shutil.rmtree(instance_addons)
             await ws_send(f"Removed {instance_addons}")
 
-        await ws_send(f"\nRestarting {service}...")
-        await run_cmd(f"systemctl restart {service}", ws_send)
-        await ws_send("Instance restarted.")
+        await ws_send(f"\nStarting {service}...")
+        await run_cmd(f"systemctl start {service}", ws_send)
+        await ws_send("Instance started.")
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})
