@@ -307,6 +307,8 @@ def _python_field_line(field, selections_map):
         attrs["required"] = True
     if field.get("index"):
         attrs["index"] = True
+    if field.get("translate"):
+        attrs["translate"] = True
 
     parts = []
     for k, v in attrs.items():
@@ -353,7 +355,7 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
         await ws("Querying Studio fields...")
         cur.execute("""
             SELECT f.id, f.name, f.field_description, f.ttype, f.state,
-                   f.required, f.index, f.relation, f.relation_field,
+                   f.required, f.index, f.translate, f.relation, f.relation_field,
                    f.relation_table, f.column1, f.column2, f.on_delete,
                    m.model, m.state as model_state
             FROM ir_model_fields f
@@ -771,10 +773,14 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
                 (other_data_ids,)
             )
 
-        # Mark module as uninstalled
-        await ws(f"Setting {module_name} to uninstalled...")
+        # Remove module record and its ir_model_data entry (under 'base' module)
+        await ws(f"Removing {module_name} from module registry...")
         cur.execute(
-            "UPDATE ir_module_module SET state = 'uninstalled' WHERE name = %s",
+            "DELETE FROM ir_model_data WHERE model = 'ir.module.module' AND res_id = (SELECT id FROM ir_module_module WHERE name = %s)",
+            (module_name,)
+        )
+        cur.execute(
+            "DELETE FROM ir_module_module WHERE name = %s",
             (module_name,)
         )
 
@@ -797,6 +803,15 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
         if mod_path.exists():
             shutil.rmtree(mod_path)
             await ws(f"Removed {mod_path}")
+
+    # Clean up deployed copy from instance addons
+    config = load_config()
+    for inst_name, inst in config.get("instances", {}).items():
+        if inst.get("client") == client:
+            deployed = Path(odoo_base_dir(inst["version"])) / "data" / inst_name / "addons" / module_name
+            if deployed.exists():
+                shutil.rmtree(deployed)
+                await ws(f"Removed {deployed}")
 
 
 async def install_or_upgrade_module(instance_name, module_name, operation, ws_send=None):
@@ -960,7 +975,27 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
           )
     """, (module_name,))
 
-    # Step 4: Clean orphaned access rules for custom models — these are leftovers
+    # Step 4: Clean intra-module duplicates — pre-install transferred Studio entries
+    # to the module, then _reflect created new entries for the same fields/models.
+    # Keep the _reflect-generated entry (standard name), delete the transferred one.
+    cur.execute("""
+        DELETE FROM ir_model_data d
+        WHERE d.module = %s
+          AND d.model IN ('ir.model.fields', 'ir.model')
+          AND EXISTS (
+              SELECT 1 FROM ir_model_data d2
+              WHERE d2.module = d.module AND d2.model = d.model AND d2.res_id = d.res_id
+                AND d2.id != d.id
+          )
+          AND d.id NOT IN (
+              SELECT MAX(id) FROM ir_model_data
+              WHERE module = %s AND model IN ('ir.model.fields', 'ir.model')
+              GROUP BY model, res_id
+          )
+    """, (module_name, module_name))
+    cleaned_intra = cur.rowcount
+
+    # Step 5: Clean orphaned access rules for custom models — these are leftovers
     # from previous cycles (no ir_model_data) now duplicated by module's CSV rules.
     cur.execute("""
         DELETE FROM ir_model_access a
@@ -975,7 +1010,7 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     conn.commit()
     cur.close()
     conn.close()
-    await ws(f"  Cleaned {cleaned_duals} dual(s), claimed {claimed_fields} field(s) + {claimed_models} model(s), removed {cleaned_rules} orphan rule(s)")
+    await ws(f"  Cleaned {cleaned_duals} dual(s) + {cleaned_intra} intra-module dup(s), claimed {claimed_fields} field(s) + {claimed_models} model(s), removed {cleaned_rules} orphan rule(s)")
 
     # Start instance
     await ws(f"Starting {service}...")

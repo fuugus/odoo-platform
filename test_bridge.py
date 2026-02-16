@@ -142,7 +142,7 @@ async def main():
     # Initial state
     stats = query_stats()
     print_stats("INITIAL STATE", stats)
-    all_pass &= check("Initial: all studio", stats, expect_studio=True, expect_module_state="uninstalled")
+    all_pass &= check("Initial: all studio", stats, expect_studio=True, expect_module_state="not_found")
 
     # --- CYCLE 1: Export ---
     print(f"\n{'─' * 60}")
@@ -164,7 +164,7 @@ async def main():
 
     stats = query_stats()
     print_stats("AFTER REVERT #1", stats)
-    all_pass &= check("Revert #1: all studio", stats, expect_studio=True, expect_module_state="uninstalled")
+    all_pass &= check("Revert #1: all studio", stats, expect_studio=True, expect_module_state="not_found")
 
     # --- CYCLE 2: Export ---
     print(f"\n{'─' * 60}")
@@ -186,7 +186,7 @@ async def main():
 
     stats = query_stats()
     print_stats("AFTER REVERT #2", stats)
-    all_pass &= check("Revert #2: all studio", stats, expect_studio=True, expect_module_state="uninstalled")
+    all_pass &= check("Revert #2: all studio", stats, expect_studio=True, expect_module_state="not_found")
 
     # --- Summary ---
     print(f"\n{'=' * 60}")

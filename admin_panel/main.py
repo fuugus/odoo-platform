@@ -762,10 +762,6 @@ async def ws_studio_bridge_revert(websocket: WebSocket):
             raise ValueError(f"Instance {instance_name} not found")
         service = instance["service"]
 
-        version = instance.get("version", "19")
-        module_name = f"{client}_base"
-        instance_addons = f"{odoo_base_dir(version)}/data/{instance_name}/addons/{module_name}"
-
         await websocket.send_json({"type": "status", "status": "running"})
 
         # Stop the instance before modifying the DB — the running Odoo process
@@ -775,11 +771,6 @@ async def ws_studio_bridge_revert(websocket: WebSocket):
         await run_cmd(f"systemctl stop {service}", ws_send)
 
         await convert_module_to_studio(db_name, client, ws_send)
-
-        # Remove deployed copy from instance addons
-        if os.path.isdir(instance_addons):
-            shutil.rmtree(instance_addons)
-            await ws_send(f"Removed {instance_addons}")
 
         await ws_send(f"\nStarting {service}...")
         await run_cmd(f"systemctl start {service}", ws_send)
