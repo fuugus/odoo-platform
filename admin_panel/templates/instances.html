@@ -80,6 +80,10 @@
                 </td>
                 <td>
                     <div class="actions">
+                    {% if inst.ssh_user %}
+                    <button class="btn btn-sm btn-secondary" onclick="showSshSetup('{{ name }}', '{{ inst.ssh_user }}', '{{ inst.version | default('19') }}')" title="SSH Access"><span class="icon icon-key{% if inst.ssh_key_set %} ssh-active{% endif %}"></span></button>
+                    <button class="btn btn-sm btn-secondary" onclick="syncToRepo('{{ name }}')" title="Sync to Repo"><span class="icon icon-upload"></span></button>
+                    {% endif %}
                     {% if inst.env != 'prod' %}
                     <button class="btn btn-sm btn-secondary" onclick="syncInstance('{{ name }}')" title="Sync from Prod"><span class="icon icon-clone"></span></button>
                     {% endif %}
@@ -240,6 +244,81 @@ async function updateWorkers(name, value) {
     } else {
         showToast('Error updating workers', 'error');
     }
+}
+
+function showSshSetup(name, sshUser, version) {
+    const old = document.getElementById('ssh-setup-row');
+    if (old) { old.remove(); return; }
+
+    const row = document.getElementById('row-' + name);
+    if (!row) return;
+    const cols = row.querySelectorAll('td').length;
+    const host = name.replace(/_/g, '-') + '.{{ config.domain }}';
+    const hasKey = document.querySelector(`#row-${name} .icon-key`)?.classList.contains('ssh-active');
+
+    const logRow = document.createElement('tr');
+    logRow.id = 'ssh-setup-row';
+    const td = document.createElement('td');
+    td.colSpan = cols;
+
+    if (hasKey) {
+        td.innerHTML = `
+            <div class="ssh-setup-panel">
+                <div class="ssh-info">
+                    <label>SSH</label>
+                    <code class="pw-value" onclick="copyText(this)" title="Click to copy">ssh ${sshUser}@${host}</code>
+                    <label>VS Code</label>
+                    <code class="pw-value" onclick="copyText(this)" title="Click to copy">code --remote ssh-remote+${sshUser}@${host} /opt/odoo${version}/data/${name}/addons</code>
+                </div>
+            </div>`;
+    } else {
+        td.innerHTML = `
+            <div class="ssh-setup-panel">
+                <div class="ssh-key-form">
+                    <label>Public Key</label>
+                    <code class="pw-value" onclick="copyText(this)" title="Click to copy" style="font-size:11px;margin-bottom:4px">ssh-keygen -t ed25519</code>
+                    <code class="pw-value" onclick="copyText(this)" title="Click to copy" style="font-size:11px;margin-bottom:6px">cat ~/.ssh/id_ed25519.pub</code>
+                    <textarea id="ssh-key-input" rows="2" placeholder="Paste output here"></textarea>
+                    <button class="btn btn-sm btn-primary" onclick="saveSshKey('${name}', '${sshUser}', '${version}')">Save Key</button>
+                </div>
+            </div>`;
+    }
+    logRow.appendChild(td);
+    row.after(logRow);
+}
+
+async function saveSshKey(name, sshUser, version) {
+    const input = document.getElementById('ssh-key-input');
+    const key = input.value.trim();
+    if (!key || !key.startsWith('ssh-')) { showToast('Invalid SSH key', 'error'); return; }
+    try {
+        const resp = await fetch(`/api/instances/${name}/ssh-key`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({public_key: key})
+        });
+        if (resp.ok) {
+            showToast('SSH key saved');
+            const icon = document.querySelector(`#row-${name} .icon-key`);
+            if (icon) icon.classList.add('ssh-active');
+            document.getElementById('ssh-setup-row')?.remove();
+            showSshSetup(name, sshUser, version);
+        } else {
+            showToast('Failed to save key', 'error');
+        }
+    } catch (e) { showToast('Failed to save key', 'error'); }
+}
+
+async function syncToRepo(name) {
+    if (!confirm(`Sync addons from ${name} to the repo? This overwrites the repo's addons directory.`)) return;
+    try {
+        const resp = await fetch(`/api/instances/${name}/sync-to-repo`, {method: 'POST'});
+        if (resp.ok) {
+            showToast('Addons synced to repo');
+        } else {
+            showToast('Sync failed', 'error');
+        }
+    } catch (e) { showToast('Sync failed', 'error'); }
 }
 
 function copyText(el) {

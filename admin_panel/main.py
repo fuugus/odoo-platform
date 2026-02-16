@@ -465,6 +465,23 @@ async def api_update_instance(instance_name: str, request: Request):
         conf = re.sub(r"^max_cron_threads\s*=.*$", f"max_cron_threads = {1 if workers > 0 else 0}", conf, flags=re.MULTILINE)
         with open(conf_path, "w") as f:
             f.write(conf)
+
+        # Toggle --dev flag in systemd service based on workers
+        version = instance.get("version", "19")
+        base = odoo_base_dir(version)
+        dev_flag = " --dev=xml,reload" if workers == 0 else ""
+        service_path = f"/etc/systemd/system/{instance['service']}.service"
+        with open(service_path, "r") as f:
+            svc = f.read()
+        svc = re.sub(
+            r"(ExecStart=.*odoo-bin -c \S+)(\s+--dev=\S+)?",
+            rf"\1{dev_flag}",
+            svc,
+        )
+        with open(service_path, "w") as f:
+            f.write(svc)
+        subprocess.run(["systemctl", "daemon-reload"], capture_output=True, timeout=10)
+
         instance["restart_needed"] = True
         save_config(config)
 
@@ -505,6 +522,59 @@ async def api_reset_admin_pw(instance_name: str):
     instance["admin_pw"] = new_pw
     save_config(config)
     return {"status": "ok", "admin_pw": new_pw}
+
+
+@app.post("/api/instances/{instance_name}/ssh-key")
+async def api_set_ssh_key(instance_name: str, request: Request):
+    """Set SSH public key for a dev instance."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    ssh_user = instance.get("ssh_user")
+    if not ssh_user:
+        raise HTTPException(status_code=400, detail="Not a dev instance")
+
+    data = await request.json()
+    public_key = data.get("public_key", "").strip()
+    if not public_key or not public_key.startswith("ssh-"):
+        raise HTTPException(status_code=400, detail="Invalid SSH public key")
+
+    version = instance.get("version", "19")
+    data_dir = f"{odoo_base_dir(version)}/data/{instance_name}"
+    auth_keys = f"{data_dir}/.ssh/authorized_keys"
+
+    with open(auth_keys, "w") as f:
+        f.write(public_key + "\n")
+
+    instance["ssh_key_set"] = True
+    save_config(config)
+    return {"status": "ok"}
+
+
+@app.post("/api/instances/{instance_name}/sync-to-repo")
+async def api_sync_to_repo(instance_name: str):
+    """Sync addons from a dev instance back to the repo."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    if not instance.get("ssh_user"):
+        raise HTTPException(status_code=400, detail="Not a dev instance")
+
+    version = instance.get("version", "19")
+    src = f"{odoo_base_dir(version)}/data/{instance_name}/addons/"
+    dst = str(PLATFORM_DIR / f"odoo{version}" / "addons/")
+
+    result = subprocess.run(
+        ["rsync", "-a", "--delete", "--exclude=.git", "--exclude=__pycache__",
+         "--exclude=.gitkeep", src, dst],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=result.stderr)
+
+    return {"status": "ok"}
 
 
 @app.get("/api/databases")

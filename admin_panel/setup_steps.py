@@ -625,6 +625,7 @@ limit_time_real = 1200
         f.write(odoo_conf)
 
     # Create systemd service
+    dev_flag = " --dev=xml,reload" if workers == 0 else ""
     service_content = f"""[Unit]
 Description=Odoo {instance_name}
 After=network.target postgresql.service
@@ -633,7 +634,7 @@ After=network.target postgresql.service
 Type=simple
 User=odoo
 Group=odoo
-ExecStart={base}/venv/bin/python3 {base}/odoo/odoo-bin -c {conf_path}
+ExecStart={base}/venv/bin/python3 {base}/odoo/odoo-bin -c {conf_path}{dev_flag}
 Restart=always
 RestartSec=5
 
@@ -687,9 +688,29 @@ WantedBy=multi-user.target
     await run_cmd(f"systemctl enable odoo-{instance_name}", ws_send)
     await run_cmd(f"systemctl start odoo-{instance_name}", ws_send)
 
+    # Set up SSH access for dev instances
+    ssh_user = None
+    if env.startswith("dev"):
+        dev_name = env.split("_", 1)[1] if "_" in env else env
+        ssh_user = f"dev-{dev_name}"
+        if ws_send:
+            await ws_send(f"Setting up SSH access ({ssh_user})...")
+        await run_cmd(
+            f"id {ssh_user} >/dev/null 2>&1 || useradd -r -d {data_dir} -s /bin/bash -G odoo {ssh_user}",
+            ws_send,
+        )
+        await run_cmd(f"chown {ssh_user}:odoo {data_dir}", ws_send)
+        await run_cmd(f"chmod 755 {data_dir}", ws_send)
+        await run_cmd(f"chown -R {ssh_user}:odoo {instance_addons}", ws_send)
+        await run_cmd(f"chmod -R g+ws {instance_addons}", ws_send)
+        await run_cmd(f"mkdir -p {data_dir}/.ssh", ws_send)
+        await run_cmd(f"touch {data_dir}/.ssh/authorized_keys", ws_send)
+        await run_cmd(f"chown -R {ssh_user}:{ssh_user} {data_dir}/.ssh", ws_send)
+        await run_cmd(f"chmod 700 {data_dir}/.ssh && chmod 600 {data_dir}/.ssh/authorized_keys", ws_send)
+
     # Update config
     config = load_config()
-    config["instances"][instance_name] = {
+    inst_config = {
         "client": client,
         "env": env,
         "version": version,
@@ -701,6 +722,9 @@ WantedBy=multi-user.target
         "service": f"odoo-{instance_name}",
         "conf": conf_path,
     }
+    if ssh_user:
+        inst_config["ssh_user"] = ssh_user
+    config["instances"][instance_name] = inst_config
     save_config(config)
 
     # Nginx per-instance config + SSL
@@ -749,6 +773,11 @@ async def delete_odoo_instance(instance_name: str, ws_send=None):
         f'su - postgres -c "dropdb --if-exists {db_name}"',
         ws_send,
     )
+
+    # Remove SSH user if exists
+    ssh_user = instance.get("ssh_user")
+    if ssh_user:
+        await run_cmd(f"userdel {ssh_user} 2>/dev/null || true", ws_send)
 
     # Clean up data directory
     data_dir = f"{base}/data/{instance_name}"
