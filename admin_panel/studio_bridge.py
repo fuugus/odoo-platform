@@ -73,6 +73,118 @@ def get_db_connection(db_name):
     )
 
 
+def get_studio_stats(db_name, client, addon_names=None):
+    """Return Studio customization stats for a database.
+
+    Returns split counts (studio vs module) for fields, models, views,
+    and optionally the install state of repo addons.
+    """
+    module_name = f"{client}_base"
+    try:
+        conn = get_db_connection(db_name)
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Fields owned by the client module (authoritative source)
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM ir_model_data d
+            JOIN ir_model_fields f ON d.res_id = f.id
+            WHERE d.module = %s AND d.model = 'ir.model.fields'
+              AND f.name LIKE 'x\\_%%'
+              AND (f.related IS NULL OR f.related = '')
+        """, (module_name,))
+        module_fields = cur.fetchone()["cnt"]
+
+        # Fields still in Studio (manual and NOT owned by the module)
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM ir_model_fields f
+            WHERE f.state = 'manual'
+              AND (f.related IS NULL OR f.related = '')
+              AND NOT EXISTS (
+                  SELECT 1 FROM ir_model_data d
+                  WHERE d.module = %s AND d.model = 'ir.model.fields'
+                    AND d.res_id = f.id
+              )
+        """, (module_name,))
+        studio_fields = cur.fetchone()["cnt"]
+
+        # Models owned by the client module
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM ir_model_data d
+            JOIN ir_model m ON d.res_id = m.id
+            WHERE d.module = %s AND d.model = 'ir.model'
+              AND m.model LIKE 'x\\_%%'
+        """, (module_name,))
+        module_models = cur.fetchone()["cnt"]
+
+        # Models still in Studio (manual and NOT owned by the module)
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM ir_model m
+            WHERE m.state = 'manual'
+              AND NOT EXISTS (
+                  SELECT 1 FROM ir_model_data d
+                  WHERE d.module = %s AND d.model = 'ir.model'
+                    AND d.res_id = m.id
+              )
+        """, (module_name,))
+        studio_models = cur.fetchone()["cnt"]
+
+        # Views owned by the client module
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM ir_model_data
+            WHERE module = %s AND model = 'ir.ui.view'
+        """, (module_name,))
+        module_views = cur.fetchone()["cnt"]
+
+        # Views still in Studio (NOT owned by the module)
+        cur.execute("""
+            SELECT COUNT(*) as cnt FROM ir_model_data d
+            WHERE d.module = 'studio_customization' AND d.model = 'ir.ui.view'
+              AND NOT EXISTS (
+                  SELECT 1 FROM ir_model_data m
+                  WHERE m.module = %s AND m.model = 'ir.ui.view'
+                    AND m.res_id = d.res_id
+              )
+        """, (module_name,))
+        studio_views = cur.fetchone()["cnt"]
+
+        # Module state
+        cur.execute("SELECT state FROM ir_module_module WHERE name = %s", (module_name,))
+        row = cur.fetchone()
+        module_state = row["state"] if row else "not_found"
+
+        # Addon install states
+        addons = {}
+        if addon_names:
+            cur.execute(
+                "SELECT name, state FROM ir_module_module WHERE name = ANY(%s)",
+                (list(addon_names),)
+            )
+            for r in cur.fetchall():
+                addons[r["name"]] = r["state"]
+            for n in addon_names:
+                if n not in addons:
+                    addons[n] = "not_found"
+
+        cur.close()
+        conn.close()
+
+        total_fields = studio_fields + module_fields
+        total_models = studio_models + module_models
+        total_views = studio_views + module_views
+
+        return {
+            "fields": {"studio": studio_fields, "module": module_fields, "total": total_fields},
+            "models": {"studio": studio_models, "module": module_models, "total": total_models},
+            "views": {"studio": studio_views, "module": module_views, "total": total_views},
+            "module_state": module_state,
+            "module_name": module_name,
+            "has_customizations": total_fields > 0 or total_models > 0 or total_views > 0,
+            "addons": addons,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def get_custom_addons_info(config):
     result = {}
     for ver in ["19", "18"]:
@@ -106,6 +218,37 @@ def get_custom_addons_info(config):
         if addons:
             result[ver] = addons
     return result
+
+
+def get_instance_addons(instance_name, version):
+    """Scan the deployed addons directory of a specific instance."""
+    base = odoo_base_dir(version)
+    addons_dir = Path(f"{base}/data/{instance_name}/addons")
+    if not addons_dir.exists():
+        return []
+    addons = []
+    for addon_path in sorted(addons_dir.iterdir()):
+        if not addon_path.is_dir() or addon_path.name.startswith("."):
+            continue
+        manifest_path = addon_path / "__manifest__.py"
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = ast.literal_eval(manifest_path.read_text())
+            addons.append({
+                "name": addon_path.name,
+                "display_name": manifest.get("name", addon_path.name),
+                "version": manifest.get("version", ""),
+                "summary": manifest.get("summary", manifest.get("description", "")[:120]),
+            })
+        except Exception:
+            addons.append({
+                "name": addon_path.name,
+                "display_name": addon_path.name,
+                "version": "?",
+                "summary": "(manifest parse error)",
+            })
+    return addons
 
 
 def _t(value):
@@ -569,13 +712,35 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
                 (access_res_ids,)
             )
 
-        # Delete remaining ownership records (fields, models, access rules, etc.)
-        non_view_ids = [r["id"] for r in owned_records if r["model"] != "ir.ui.view"]
-        if non_view_ids:
-            await ws(f"Removing {len(non_view_ids)} ownership record(s)...")
+        # Handle field/model ownership: if studio_customization also owns the
+        # same record, delete the module's duplicate. Otherwise transfer back
+        # to studio_customization (these were claimed from Studio during install).
+        field_model_data_ids = [r["id"] for r in field_records + model_records]
+        if field_model_data_ids:
+            cur.execute("""
+                DELETE FROM ir_model_data d
+                WHERE d.id = ANY(%s)
+                  AND EXISTS (
+                      SELECT 1 FROM ir_model_data s
+                      WHERE s.module = 'studio_customization'
+                        AND s.model = d.model AND s.res_id = d.res_id
+                  )
+            """, (field_model_data_ids,))
+            deleted = cur.rowcount
+            cur.execute("""
+                UPDATE ir_model_data SET module = 'studio_customization'
+                WHERE id = ANY(%s)
+            """, (field_model_data_ids,))
+            transferred = cur.rowcount
+            await ws(f"  Ownership: {deleted} returned to Studio (inherited), {transferred} transferred back (custom models)")
+
+        # Delete other ownership records (access rules, etc.)
+        other_data_ids = [r["id"] for r in access_records + other_records]
+        if other_data_ids:
+            await ws(f"Removing {len(other_data_ids)} other ownership record(s)...")
             cur.execute(
                 "DELETE FROM ir_model_data WHERE id = ANY(%s)",
-                (non_view_ids,)
+                (other_data_ids,)
             )
 
         # Mark module as uninstalled
@@ -650,6 +815,62 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
         f"--no-http --logfile= 2>&1'",
         ws,
     )
+
+    # Post-install: claim custom model fields/models from studio_customization.
+    # Odoo doesn't take ownership of fields on custom models (x_*) during install
+    # because they already exist with studio_customization ownership.
+    await ws("Claiming custom model ownership...")
+    conn = get_db_connection(db_name)
+    cur = conn.cursor()
+
+    # Transfer custom model field ownership
+    cur.execute("""
+        UPDATE ir_model_data SET module = %s
+        WHERE module = 'studio_customization'
+          AND model = 'ir.model.fields'
+          AND res_id IN (
+              SELECT f.id FROM ir_model_fields f
+              JOIN ir_model m ON f.model_id = m.id
+              WHERE m.model LIKE 'x\\_%%' AND f.name LIKE 'x\\_%%'
+          )
+    """, (module_name,))
+    claimed_fields = cur.rowcount
+
+    # Set those fields to state=base
+    cur.execute("""
+        UPDATE ir_model_fields SET state = 'base'
+        WHERE state = 'manual'
+          AND id IN (
+              SELECT res_id FROM ir_model_data
+              WHERE module = %s AND model = 'ir.model.fields'
+          )
+    """, (module_name,))
+
+    # Transfer custom model ownership
+    cur.execute("""
+        UPDATE ir_model_data SET module = %s
+        WHERE module = 'studio_customization'
+          AND model = 'ir.model'
+          AND res_id IN (
+              SELECT id FROM ir_model WHERE model LIKE 'x\\_%%'
+          )
+    """, (module_name,))
+    claimed_models = cur.rowcount
+
+    # Set custom models to state=base
+    cur.execute("""
+        UPDATE ir_model SET state = 'base'
+        WHERE state = 'manual'
+          AND id IN (
+              SELECT res_id FROM ir_model_data
+              WHERE module = %s AND model = 'ir.model'
+          )
+    """, (module_name,))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    await ws(f"  Claimed {claimed_fields} field(s), {claimed_models} model(s) from Studio")
 
     # Start instance
     await ws(f"Starting {service}...")

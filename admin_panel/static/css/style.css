@@ -210,6 +210,19 @@ body {
     margin-top: 4px;
 }
 
+.stat-value .badge {
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.stat-detail {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    letter-spacing: 0;
+    font-weight: 400;
+}
+
 .stat-label {
     font-size: 10px;
     color: var(--text-muted);

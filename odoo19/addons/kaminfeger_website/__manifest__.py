@@ -12,7 +12,6 @@
         'website_event',
         'hr',
         'website_hr_recruitment',
-        'kaminfeger_base',
     ],
     'data': [
         'data/website.xml',

@@ -7,37 +7,50 @@
     <p>Convert Studio customizations to proper modules and back</p>
 </div>
 
-{% for ver, addons in custom_addons.items() %}
 <div class="card">
-    <h3>Custom Addons — Odoo {{ ver }}</h3>
-    {% if addons %}
-    <table class="data-table">
-        <thead>
-            <tr><th>Module</th><th>Name</th><th>Version</th><th>Summary</th></tr>
-        </thead>
-        <tbody>
-        {% for addon in addons %}
-            <tr>
-                <td><code>{{ addon.name }}</code></td>
-                <td>{{ addon.display_name }}</td>
-                <td>{{ addon.version }}</td>
-                <td>{{ addon.summary }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="empty-state">No custom addons found</p>
-    {% endif %}
+    <h3>Instance</h3>
+    <div class="form-row" style="max-width:400px;">
+        <select id="bridge-instance" onchange="onInstanceChange()">
+            <option value="">Select instance...</option>
+            {% for name, inst in instances.items() %}
+            <option value="{{ name }}"
+                    data-version="{{ inst.version | default('19') }}"
+                    data-client="{{ inst.client }}"
+                    data-db="{{ inst.db_name }}"
+                    {% if name == selected_instance %}selected{% endif %}>
+                {{ name }} (v{{ inst.version | default('19') }}, {{ inst.env }})
+            </option>
+            {% endfor %}
+        </select>
+    </div>
 </div>
-{% endfor %}
 
-{% if not custom_addons %}
-<div class="card">
-    <h3>Custom Addons</h3>
-    <p class="empty-state">No custom addons directories found</p>
+<div id="bridge-stats" class="stats-grid" style="display:none;">
+    <div class="stat-card card">
+        <div class="stat-label">Fields</div>
+        <div class="stat-value" id="stat-fields">-</div>
+        <div class="stat-detail" id="stat-fields-detail"></div>
+    </div>
+    <div class="stat-card card">
+        <div class="stat-label">Models</div>
+        <div class="stat-value" id="stat-models">-</div>
+        <div class="stat-detail" id="stat-models-detail"></div>
+    </div>
+    <div class="stat-card card">
+        <div class="stat-label">Views</div>
+        <div class="stat-value" id="stat-views">-</div>
+        <div class="stat-detail" id="stat-views-detail"></div>
+    </div>
+    <div class="stat-card card">
+        <div class="stat-label">Module</div>
+        <div class="stat-value" id="stat-module">-</div>
+    </div>
 </div>
-{% endif %}
+
+<div id="addons-card" class="card" style="display:none;">
+    <h3 id="addons-title">Deployed Addons</h3>
+    <div id="addons-content"></div>
+</div>
 
 <div class="card no-border">
     <h3>Convert</h3>
@@ -45,20 +58,9 @@
         Export reads Studio fields and models from the database, generates a <code>{client}_base</code> module, and installs it on the instance.
         Revert converts module-owned records back to Studio state for major upgrades.
     </p>
-    <div class="form-grid">
-        <div class="form-row">
-            <label for="bridge-instance">Instance</label>
-            <select id="bridge-instance">
-                <option value="">Select instance...</option>
-                {% for name, inst in instances.items() %}
-                <option value="{{ name }}" data-version="{{ inst.version | default('19') }}" data-client="{{ inst.client }}" data-db="{{ inst.db_name }}">{{ name }} (v{{ inst.version | default('19') }}, {{ inst.env }})</option>
-                {% endfor %}
-            </select>
-        </div>
-    </div>
     <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary" id="btn-export" onclick="startExport()">Studio → Module</button>
-        <button class="btn btn-danger" id="btn-revert" onclick="startRevert()">Module → Studio</button>
+        <button class="btn btn-primary" id="btn-export" onclick="startExport()" disabled>Studio → Module</button>
+        <button class="btn btn-danger" id="btn-revert" onclick="startRevert()" disabled>Module → Studio</button>
     </div>
     <div class="step-log" id="bridge-log" style="display:none;margin-top:14px;">
         <pre></pre>
@@ -85,6 +87,110 @@ function setButtons(disabled) {
     document.getElementById('btn-revert').disabled = disabled;
 }
 
+async function onInstanceChange() {
+    const sel = document.getElementById('bridge-instance');
+
+    if (!sel.value) {
+        document.getElementById('bridge-stats').style.display = 'none';
+        document.getElementById('addons-card').style.display = 'none';
+        setButtons(true);
+        return;
+    }
+
+    setButtons(false);
+    await fetchStats(sel.value);
+}
+
+function splitLabel(obj) {
+    if (obj.total === 0) return '';
+    const parts = [];
+    if (obj.studio > 0) parts.push(obj.studio + ' studio');
+    if (obj.module > 0) parts.push(obj.module + ' module');
+    return parts.join(' · ');
+}
+
+function addonBadge(state) {
+    if (state === 'installed') return '<span class="badge badge-prod">installed</span>';
+    if (state === 'uninstalled') return '<span class="badge badge-staging">uninstalled</span>';
+    return '<span style="color:var(--text-muted)">not installed</span>';
+}
+
+function renderAddons(addons, addonStates) {
+    const card = document.getElementById('addons-card');
+    const content = document.getElementById('addons-content');
+
+    if (!addons || addons.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    let html = '<table class="data-table"><thead><tr>';
+    html += '<th>Module</th><th>Name</th><th>Version</th><th>State</th><th>Summary</th>';
+    html += '</tr></thead><tbody>';
+    for (const a of addons) {
+        const state = addonStates[a.name] || 'not_found';
+        html += '<tr>';
+        html += `<td><code>${a.name}</code></td>`;
+        html += `<td>${a.display_name}</td>`;
+        html += `<td>${a.version}</td>`;
+        html += `<td>${addonBadge(state)}</td>`;
+        html += `<td>${a.summary}</td>`;
+        html += '</tr>';
+    }
+    html += '</tbody></table>';
+    content.innerHTML = html;
+    card.style.display = '';
+}
+
+async function fetchStats(instanceName) {
+    const statsEl = document.getElementById('bridge-stats');
+    statsEl.style.display = '';
+
+    ['stat-fields', 'stat-models', 'stat-views'].forEach(id => {
+        document.getElementById(id).textContent = '...';
+        const detail = document.getElementById(id + '-detail');
+        if (detail) detail.textContent = '';
+    });
+    document.getElementById('stat-module').innerHTML = '...';
+
+    try {
+        const resp = await fetch(`/api/studio-bridge/info/${instanceName}`);
+        const data = await resp.json();
+
+        if (data.error) {
+            ['stat-fields', 'stat-models', 'stat-views'].forEach(id => {
+                document.getElementById(id).textContent = '-';
+            });
+            document.getElementById('stat-module').innerHTML = '<span style="color:var(--text-muted)">error</span>';
+            document.getElementById('addons-card').style.display = 'none';
+            showToast('Could not query database', 'error');
+            return;
+        }
+
+        document.getElementById('stat-fields').textContent = data.fields.total;
+        document.getElementById('stat-fields-detail').textContent = splitLabel(data.fields);
+
+        document.getElementById('stat-models').textContent = data.models.total;
+        document.getElementById('stat-models-detail').textContent = splitLabel(data.models);
+
+        document.getElementById('stat-views').textContent = data.views.total;
+        document.getElementById('stat-views-detail').textContent = splitLabel(data.views);
+
+        const stateEl = document.getElementById('stat-module');
+        if (data.module_state === 'installed') {
+            stateEl.innerHTML = '<span class="badge badge-prod">installed</span>';
+        } else if (data.module_state === 'uninstalled') {
+            stateEl.innerHTML = '<span class="badge badge-staging">uninstalled</span>';
+        } else {
+            stateEl.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">no module</span>';
+        }
+
+        renderAddons(data.instance_addons, data.addons || {});
+    } catch (e) {
+        showToast('Failed to fetch stats', 'error');
+    }
+}
+
 function startExport() {
     const info = getSelected();
     if (!info) { showToast('Select an instance', 'error'); return; }
@@ -102,7 +208,10 @@ function startExport() {
             }));
         },
         onStatus(status) {
-            if (status === 'done') showToast('Export and install complete', 'success');
+            if (status === 'done') {
+                showToast('Export and install complete', 'success');
+                fetchStats(info.instance);
+            }
             if (status === 'error') showToast('Export failed', 'error');
         },
         onClose() {
@@ -129,7 +238,10 @@ function startRevert() {
             }));
         },
         onStatus(status) {
-            if (status === 'done') showToast('Revert complete', 'success');
+            if (status === 'done') {
+                showToast('Revert complete', 'success');
+                fetchStats(info.instance);
+            }
             if (status === 'error') showToast('Revert failed', 'error');
         },
         onClose() {
@@ -137,5 +249,17 @@ function startRevert() {
         }
     });
 }
+
+// Auto-select from query param or pre-selected value
+(function() {
+    const instance = new URLSearchParams(window.location.search).get('instance');
+    if (instance) {
+        const sel = document.getElementById('bridge-instance');
+        sel.value = instance;
+        if (sel.value === instance) onInstanceChange();
+    } else if (document.getElementById('bridge-instance').value) {
+        onInstanceChange();
+    }
+})();
 </script>
 {% endblock %}

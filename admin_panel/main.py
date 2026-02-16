@@ -27,8 +27,8 @@ from setup_steps import (
     create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd,
 )
 from studio_bridge import (
-    get_custom_addons_info, export_studio_to_module,
-    convert_module_to_studio, install_or_upgrade_module,
+    get_custom_addons_info, get_instance_addons, get_studio_stats,
+    export_studio_to_module, convert_module_to_studio, install_or_upgrade_module,
 )
 
 _public_ip_cache = None
@@ -316,7 +316,7 @@ async def databases_page(request: Request):
 
 
 @app.get("/studio-bridge", response_class=HTMLResponse)
-async def studio_bridge_page(request: Request):
+async def studio_bridge_page(request: Request, instance: str = ""):
     """Studio Bridge page."""
     config = load_config()
     instances = {}
@@ -326,7 +326,7 @@ async def studio_bridge_page(request: Request):
         "request": request,
         "config": config,
         "instances": instances,
-        "custom_addons": get_custom_addons_info(config),
+        "selected_instance": instance,
         "user": get_current_user(request),
     })
 
@@ -559,6 +559,41 @@ async def api_deploy(request: Request):
         "git_output": git_output,
         "instance": instance_name,
     }
+
+
+# ─── Studio Bridge API ───────────────────────────────────────────────────────
+
+@app.get("/api/studio-bridge/info/{instance_name}")
+async def api_studio_bridge_info(instance_name: str):
+    """Full Studio customization stats for a single instance."""
+    config = load_config()
+    instance = config.get("instances", {}).get(instance_name)
+    if not instance:
+        return {"error": f"Instance {instance_name} not found"}
+    version = instance.get("version", "19")
+    instance_addons = get_instance_addons(instance_name, version)
+    addon_names = [a["name"] for a in instance_addons]
+    stats = get_studio_stats(instance["db_name"], instance["client"], addon_names)
+    stats["instance_addons"] = instance_addons
+    return stats
+
+
+@app.get("/api/studio-bridge/summary")
+async def api_studio_bridge_summary():
+    """Lightweight customization summary for all instances."""
+    config = load_config()
+    result = {}
+    for name, inst in config.get("instances", {}).items():
+        stats = get_studio_stats(inst["db_name"], inst["client"])
+        if "error" in stats:
+            result[name] = {"error": stats["error"]}
+        else:
+            result[name] = {
+                "has_customizations": stats["has_customizations"],
+                "module_state": stats["module_state"],
+                "fields": stats["fields"],
+            }
+    return result
 
 
 # ─── WebSocket for Setup Steps ──────────────────────────────────────────────

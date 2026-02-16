@@ -54,6 +54,7 @@
                 <th>Workers</th>
                 <th>Master PW &rsaquo; DB</th>
                 <th>Admin PW &rsaquo; Odoo</th>
+                <th>Customizations</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -70,6 +71,7 @@
                 <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}"></td>
                 <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/database/manager')" title="Copy PW & open DB manager">{{ inst.master_pw | default('–') }}</span></td>
                 <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/login')" title="Copy PW & open Odoo">{{ inst.admin_pw | default('–') }}</span></td>
+                <td id="cust-{{ name }}"><span style="color:var(--text-muted)">...</span></td>
                 <td id="status-{{ name }}">
                     <a href="https://{{ fqdn }}" target="_blank">
                         <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
@@ -274,5 +276,38 @@ StatusPoller.init(function(data, pending) {
         }
     }
 });
+
+(async function loadCustomizationInfo() {
+    try {
+        const resp = await fetch('/api/studio-bridge/summary');
+        const data = await resp.json();
+        for (const [name, info] of Object.entries(data)) {
+            const cell = document.getElementById('cust-' + name);
+            if (!cell) continue;
+            if (info.error) {
+                cell.innerHTML = '<span style="color:var(--text-muted)">-</span>';
+                continue;
+            }
+            if (!info.has_customizations) {
+                cell.innerHTML = '<span style="color:var(--text-muted)">none</span>';
+                continue;
+            }
+            const f = info.fields;
+            const hasStudio = f.studio > 0;
+            const hasModule = f.module > 0;
+            let html = '<a href="/studio-bridge?instance=' + name + '" style="text-decoration:none;">';
+            if (hasModule && !hasStudio) {
+                html += '<span class="badge badge-prod">module</span>';
+            } else if (hasStudio && !hasModule) {
+                html += '<span class="badge badge-staging">studio</span>';
+            } else {
+                html += '<span class="badge badge-staging">' + f.studio + ' studio</span> ';
+                html += '<span class="badge badge-prod">' + f.module + ' module</span>';
+            }
+            html += '</a>';
+            cell.innerHTML = html;
+        }
+    } catch (e) {}
+})();
 </script>
 {% endblock %}
