@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -314,9 +315,9 @@ async def databases_page(request: Request):
     })
 
 
-@app.get("/modules", response_class=HTMLResponse)
-async def modules_page(request: Request):
-    """Modules management page."""
+@app.get("/studio-bridge", response_class=HTMLResponse)
+async def studio_bridge_page(request: Request):
+    """Studio Bridge page."""
     config = load_config()
     instances = {}
     for name, inst in config.get("instances", {}).items():
@@ -656,76 +657,11 @@ async def ws_sync_instance(websocket: WebSocket, instance_name: str):
         await websocket.close()
 
 
-# ─── WebSocket for Modules ───────────────────────────────────────────────────
+# ─── WebSocket for Studio Bridge ─────────────────────────────────────────────
 
-@app.websocket("/ws/modules/export")
-async def ws_modules_export(websocket: WebSocket):
-    """WebSocket endpoint for exporting Studio customizations to a module."""
-    await websocket.accept()
-
-    config = load_config()
-    if not await verify_ws_auth(websocket, config):
-        await websocket.send_json({"type": "error", "message": "Authentication required"})
-        await websocket.close()
-        return
-
-    try:
-        data = await websocket.receive_json()
-        db_name = data.get("db_name")
-        client = data.get("client")
-        version = data.get("version", "19")
-
-        if not db_name or not client:
-            raise ValueError("db_name and client are required")
-
-        async def ws_send(message: str):
-            await websocket.send_json({"type": "log", "message": message})
-
-        await websocket.send_json({"type": "status", "status": "running"})
-        await export_studio_to_module(db_name, client, version, ws_send)
-        await websocket.send_json({"type": "status", "status": "done"})
-    except Exception as e:
-        await websocket.send_json({"type": "error", "message": str(e)})
-        await websocket.send_json({"type": "status", "status": "error"})
-    finally:
-        await websocket.close()
-
-
-@app.websocket("/ws/modules/prepare-upgrade")
-async def ws_modules_prepare_upgrade(websocket: WebSocket):
-    """WebSocket endpoint for reverting module fields back to Studio state."""
-    await websocket.accept()
-
-    config = load_config()
-    if not await verify_ws_auth(websocket, config):
-        await websocket.send_json({"type": "error", "message": "Authentication required"})
-        await websocket.close()
-        return
-
-    try:
-        data = await websocket.receive_json()
-        db_name = data.get("db_name")
-        client = data.get("client")
-
-        if not db_name or not client:
-            raise ValueError("db_name and client are required")
-
-        async def ws_send(message: str):
-            await websocket.send_json({"type": "log", "message": message})
-
-        await websocket.send_json({"type": "status", "status": "running"})
-        await convert_module_to_studio(db_name, client, ws_send)
-        await websocket.send_json({"type": "status", "status": "done"})
-    except Exception as e:
-        await websocket.send_json({"type": "error", "message": str(e)})
-        await websocket.send_json({"type": "status", "status": "error"})
-    finally:
-        await websocket.close()
-
-
-@app.websocket("/ws/modules/operation")
-async def ws_modules_operation(websocket: WebSocket):
-    """WebSocket endpoint for installing or upgrading a module on an instance."""
+@app.websocket("/ws/studio-bridge/export")
+async def ws_studio_bridge_export(websocket: WebSocket):
+    """Export Studio customizations to a module and install it on the instance."""
     await websocket.accept()
 
     config = load_config()
@@ -737,19 +673,75 @@ async def ws_modules_operation(websocket: WebSocket):
     try:
         data = await websocket.receive_json()
         instance_name = data.get("instance_name")
-        module_name = data.get("module_name")
-        operation = data.get("operation", "install")
+        db_name = data.get("db_name")
+        client = data.get("client")
+        version = data.get("version", "19")
 
-        if not instance_name or not module_name:
-            raise ValueError("instance_name and module_name are required")
-        if operation not in ("install", "upgrade"):
-            raise ValueError("operation must be 'install' or 'upgrade'")
+        if not db_name or not client or not instance_name:
+            raise ValueError("instance_name, db_name and client are required")
+
+        module_name = f"{client}_base"
 
         async def ws_send(message: str):
             await websocket.send_json({"type": "log", "message": message})
 
         await websocket.send_json({"type": "status", "status": "running"})
-        await install_or_upgrade_module(instance_name, module_name, operation, ws_send)
+        await export_studio_to_module(db_name, client, version, ws_send)
+        await ws_send(f"\n{'=' * 50}")
+        await ws_send(f"Installing {module_name} on {instance_name}...")
+        await ws_send(f"{'=' * 50}\n")
+        await install_or_upgrade_module(instance_name, module_name, "install", ws_send)
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
+    finally:
+        await websocket.close()
+
+
+@app.websocket("/ws/studio-bridge/revert")
+async def ws_studio_bridge_revert(websocket: WebSocket):
+    """Revert module fields back to Studio state and restart the instance."""
+    await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
+    try:
+        data = await websocket.receive_json()
+        instance_name = data.get("instance_name")
+        db_name = data.get("db_name")
+        client = data.get("client")
+
+        if not db_name or not client or not instance_name:
+            raise ValueError("instance_name, db_name and client are required")
+
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        instance = config["instances"].get(instance_name)
+        if not instance:
+            raise ValueError(f"Instance {instance_name} not found")
+        service = instance["service"]
+
+        version = instance.get("version", "19")
+        module_name = f"{client}_base"
+        instance_addons = f"{odoo_base_dir(version)}/data/{instance_name}/addons/{module_name}"
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await convert_module_to_studio(db_name, client, ws_send)
+
+        # Remove deployed copy from instance addons
+        if os.path.isdir(instance_addons):
+            shutil.rmtree(instance_addons)
+            await ws_send(f"Removed {instance_addons}")
+
+        await ws_send(f"\nRestarting {service}...")
+        await run_cmd(f"systemctl restart {service}", ws_send)
+        await ws_send("Instance restarted.")
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})

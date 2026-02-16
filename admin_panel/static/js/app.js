@@ -42,7 +42,7 @@ document.addEventListener('keydown', (e) => {
             { name: 'Setup Wizard', url: '/setup' },
             { name: 'Dashboard', url: '/dashboard' },
             { name: 'Instances', url: '/instances' },
-            { name: 'Modules', url: '/modules' },
+            { name: 'Studio Bridge', url: '/studio-bridge' },
             { name: 'Deploy', url: '/deploy' },
             { name: 'Databases', url: '/databases' },
         ];

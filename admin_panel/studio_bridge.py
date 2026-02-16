@@ -11,6 +11,7 @@ Functions:
 import ast
 import os
 import re
+import shutil
 import textwrap
 from pathlib import Path
 
@@ -107,6 +108,13 @@ def get_custom_addons_info(config):
     return result
 
 
+def _t(value):
+    """Extract a plain string from a possibly-translated JSONB dict."""
+    if isinstance(value, dict):
+        return value.get("en_US") or next(iter(value.values()), "")
+    return value or ""
+
+
 def _sanitize_model_filename(model_name):
     return model_name.replace(".", "_").replace("-", "_")
 
@@ -121,13 +129,13 @@ def _python_field_line(field, selections_map):
     attrs = {}
 
     if field.get("field_description"):
-        attrs["string"] = field["field_description"]
+        attrs["string"] = _t(field["field_description"])
 
     if ftype == "selection":
         sel_key = (field["model"], fname)
         options = selections_map.get(sel_key, [])
         if options:
-            sel_list = [(s["value"], s["name"]) for s in options]
+            sel_list = [(s["value"], _t(s["name"])) for s in options]
             attrs["selection"] = sel_list
 
     if ftype == "many2one":
@@ -208,6 +216,7 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
             FROM ir_model_fields f
             JOIN ir_model m ON f.model_id = m.id
             WHERE f.state = 'manual'
+              AND (f.related IS NULL OR f.related = '')
             ORDER BY m.model, f.name
         """)
         all_fields = cur.fetchall()
@@ -229,17 +238,18 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
             selections_map.setdefault(key, []).append(s)
         await ws(f"  Found {len(selections_raw)} selection option(s)")
 
-        # 4. Access rules for custom models
+        # 4. Access rules for custom models (deduplicated by model+group+perms)
         await ws("Querying access rules...")
         cur.execute("""
-            SELECT a.name, m.model,
+            SELECT DISTINCT ON (m.model, a.group_id, a.perm_read, a.perm_write, a.perm_create, a.perm_unlink)
+                   a.name, m.model,
                    COALESCE(d.module || '.' || d.name, '') as group_xmlid,
                    a.perm_read, a.perm_write, a.perm_create, a.perm_unlink
             FROM ir_model_access a
             JOIN ir_model m ON a.model_id = m.id
             LEFT JOIN ir_model_data d ON d.model = 'res.groups' AND d.res_id = a.group_id
             WHERE m.state = 'manual'
-            ORDER BY m.model, a.name
+            ORDER BY m.model, a.group_id, a.perm_read, a.perm_write, a.perm_create, a.perm_unlink, a.name
         """)
         access_rules = cur.fetchall()
         await ws(f"  Found {len(access_rules)} access rule(s)")
@@ -280,9 +290,11 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
         if not depends:
             depends = ["base"]
 
-        # Generate module files
+        # Generate module files (clean previous output first)
         await ws(f"\nGenerating module {module_name}...")
 
+        if module_dir.exists():
+            shutil.rmtree(module_dir)
         for d in [module_dir, models_dir, security_dir, views_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
@@ -303,7 +315,7 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
                 "",
                 f"class {_class_name(model_name)}(models.Model):",
                 f'    _name = "{model_name}"',
-                f'    _description = "{model["name"]}"',
+                f'    _description = "{_t(model["name"])}"',
             ]
             for f in fields:
                 fl = _python_field_line(f, selections_map)
@@ -344,17 +356,34 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
 
         # security/ir.model.access.csv
         if access_rules:
+            # Look up existing ir_model_data for each model to get correct external IDs
+            model_xmlid_map = {}
+            for rule in access_rules:
+                model_name = rule["model"]
+                if model_name not in model_xmlid_map:
+                    cur.execute("""
+                        SELECT module, name FROM ir_model_data
+                        WHERE model = 'ir.model' AND res_id = (
+                            SELECT id FROM ir_model WHERE model = %s LIMIT 1
+                        ) LIMIT 1
+                    """, (model_name,))
+                    row = cur.fetchone()
+                    if row:
+                        model_xmlid_map[model_name] = f"{row['module']}.{row['name']}"
+                    else:
+                        model_xmlid_map[model_name] = f"model_{model_name.replace('.', '_')}"
+
             csv_lines = ["id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink"]
             for rule in access_rules:
                 model_under = rule["model"].replace(".", "_")
                 rule_id = f"access_{model_under}_{rule['name'].replace(' ', '_').replace('.', '_').lower()}"
-                model_ref = f"model_{model_under}"
+                model_ref = model_xmlid_map[rule["model"]]
                 group_ref = rule["group_xmlid"] or ""
                 r = int(rule["perm_read"])
                 w = int(rule["perm_write"])
                 c = int(rule["perm_create"])
                 u = int(rule["perm_unlink"])
-                csv_lines.append(f"{rule_id},{rule['name']},{model_ref},{group_ref},{r},{w},{c},{u}")
+                csv_lines.append(f"{rule_id},{_t(rule['name'])},{model_ref},{group_ref},{r},{w},{c},{u}")
             (security_dir / "ir.model.access.csv").write_text("\n".join(csv_lines) + "\n")
             await ws(f"  security/ir.model.access.csv ({len(access_rules)} rules)")
 
@@ -362,8 +391,7 @@ async def export_studio_to_module(db_name, client, version, ws_send=None):
         if studio_views:
             xml_lines = ['<?xml version="1.0" encoding="utf-8"?>', "<odoo>"]
             for view in studio_views:
-                arch = view["arch_db"] or ""
-                # Extract the inner content if wrapped in data tag
+                arch = _t(view["arch_db"])
                 xml_lines.append(f"")
                 xml_lines.append(f"    <record id=\"{view['xmlid_name']}\" model=\"ir.ui.view\">")
                 xml_lines.append(f"        <field name=\"name\">{view['name']}</field>")
@@ -462,33 +490,83 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
         field_records = [r for r in owned_records if r["model"] == "ir.model.fields"]
         model_records = [r for r in owned_records if r["model"] == "ir.model"]
         view_records = [r for r in owned_records if r["model"] == "ir.ui.view"]
-        other_records = [r for r in owned_records if r["model"] not in ("ir.model.fields", "ir.model", "ir.ui.view")]
+        access_records = [r for r in owned_records if r["model"] == "ir.model.access"]
+        other_records = [r for r in owned_records if r["model"] not in ("ir.model.fields", "ir.model", "ir.ui.view", "ir.model.access")]
 
-        # Revert fields to manual state
+        # Revert fields to manual state (only x_ fields — Odoo constraint requires it)
         if field_records:
             field_ids = [r["res_id"] for r in field_records]
-            await ws(f"Reverting {len(field_ids)} field(s) to state=manual...")
             cur.execute(
-                "UPDATE ir_model_fields SET state = 'manual' WHERE id = ANY(%s)",
+                "SELECT id FROM ir_model_fields WHERE id = ANY(%s) AND name LIKE 'x\\_%%'",
                 (field_ids,)
             )
+            x_field_ids = [row["id"] for row in cur.fetchall()]
+            skip_count = len(field_ids) - len(x_field_ids)
+            await ws(f"Reverting {len(x_field_ids)} field(s) to state=manual (skipping {skip_count} non-x_ fields)...")
+            if x_field_ids:
+                cur.execute(
+                    "UPDATE ir_model_fields SET state = 'manual' WHERE id = ANY(%s)",
+                    (x_field_ids,)
+                )
 
-        # Revert models to manual state
+        # Revert custom models to manual state (only x_ models)
         if model_records:
             model_ids = [r["res_id"] for r in model_records]
-            await ws(f"Reverting {len(model_ids)} model(s) to state=manual...")
             cur.execute(
-                "UPDATE ir_model SET state = 'manual' WHERE id = ANY(%s)",
+                "SELECT id FROM ir_model WHERE id = ANY(%s) AND model LIKE 'x\\_%%'",
                 (model_ids,)
             )
+            x_model_ids = [row["id"] for row in cur.fetchall()]
+            skip_count = len(model_ids) - len(x_model_ids)
+            await ws(f"Reverting {len(x_model_ids)} model(s) to state=manual (skipping {skip_count} standard models)...")
+            if x_model_ids:
+                cur.execute(
+                    "UPDATE ir_model SET state = 'manual' WHERE id = ANY(%s)",
+                    (x_model_ids,)
+                )
 
-        # Transfer view ownership to studio_customization
+        # For views: delete the module's duplicate views and ownership records
+        # (the original studio_customization records still exist)
         if view_records:
+            view_res_ids = [r["res_id"] for r in view_records]
             view_data_ids = [r["id"] for r in view_records]
-            await ws(f"Transferring {len(view_data_ids)} view(s) to studio_customization...")
+            # Check which views are duplicates (studio_customization original still exists)
+            cur.execute("""
+                SELECT res_id FROM ir_model_data
+                WHERE module = 'studio_customization' AND model = 'ir.ui.view'
+                AND res_id != ALL(%s)
+                AND name IN (SELECT name FROM ir_model_data WHERE id = ANY(%s))
+            """, (view_res_ids, view_data_ids))
+            original_exists = {r["res_id"] for r in cur.fetchall()}
+            # Delete duplicate views created by module install
+            cur.execute("""
+                SELECT d.res_id FROM ir_model_data d
+                WHERE d.id = ANY(%s)
+                AND EXISTS (
+                    SELECT 1 FROM ir_model_data o
+                    WHERE o.module = 'studio_customization'
+                    AND o.model = 'ir.ui.view'
+                    AND o.name = d.name
+                    AND o.res_id != d.res_id
+                )
+            """, (view_data_ids,))
+            dup_view_ids = [r["res_id"] for r in cur.fetchall()]
+            if dup_view_ids:
+                await ws(f"Removing {len(dup_view_ids)} duplicate view(s) created by module install...")
+                cur.execute("DELETE FROM ir_ui_view WHERE id = ANY(%s)", (dup_view_ids,))
+            await ws(f"Removing {len(view_data_ids)} view ownership record(s)...")
             cur.execute(
-                "UPDATE ir_model_data SET module = 'studio_customization' WHERE id = ANY(%s)",
+                "DELETE FROM ir_model_data WHERE id = ANY(%s)",
                 (view_data_ids,)
+            )
+
+        # Delete duplicate access rules created by module install
+        if access_records:
+            access_res_ids = [r["res_id"] for r in access_records]
+            await ws(f"Removing {len(access_res_ids)} module-created access rule(s)...")
+            cur.execute(
+                "DELETE FROM ir_model_access WHERE id = ANY(%s)",
+                (access_res_ids,)
             )
 
         # Delete remaining ownership records (fields, models, access rules, etc.)
@@ -519,6 +597,13 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
     finally:
         cur.close()
         conn.close()
+
+    # Clean up generated module files from repo
+    for ver in ["19", "18"]:
+        mod_path = Path(PLATFORM_DIR) / f"odoo{ver}" / "addons" / module_name
+        if mod_path.exists():
+            shutil.rmtree(mod_path)
+            await ws(f"Removed {mod_path}")
 
 
 async def install_or_upgrade_module(instance_name, module_name, operation, ws_send=None):
@@ -556,13 +641,13 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
         )
         await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws)
 
-    # Run odoo-bin
+    # Run odoo-bin (--logfile= forces output to stdout instead of conf logfile)
     odoo_bin = f"{base}/odoo/odoo-bin"
     await ws(f"Running odoo-bin {flag} {module_name}...")
     await run_cmd(
         f"su - odoo -s /bin/bash -c '{base}/venv/bin/python {odoo_bin} "
         f"-c {conf_path} {flag} {module_name} --stop-after-init "
-        f"--no-http 2>&1'",
+        f"--no-http --logfile= 2>&1'",
         ws,
     )
 

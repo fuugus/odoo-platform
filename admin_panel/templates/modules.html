@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Modules - Odoo Platform{% endblock %}
+{% block title %}Studio Bridge - Odoo Platform{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Modules</h1>
-    <p>Custom addons, Studio Bridge export/revert, and module operations</p>
+    <h1>Studio Bridge</h1>
+    <p>Convert Studio customizations to proper modules and back</p>
 </div>
 
 {% for ver, addons in custom_addons.items() %}
@@ -39,10 +39,11 @@
 </div>
 {% endif %}
 
-<div class="card">
-    <h3>Studio Bridge</h3>
+<div class="card no-border">
+    <h3>Convert</h3>
     <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
-        Export Studio customizations into a proper Odoo module, or revert module fields back to Studio state before a major upgrade.
+        Export reads Studio fields and models from the database, generates a <code>{client}_base</code> module, and installs it on the instance.
+        Revert converts module-owned records back to Studio state for major upgrades.
     </p>
     <div class="form-grid">
         <div class="form-row">
@@ -56,39 +57,10 @@
         </div>
     </div>
     <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary" id="btn-export" onclick="startExport()">Export Studio → Module</button>
-        <button class="btn btn-danger" id="btn-revert" onclick="startRevert()">Prepare for Upgrade</button>
+        <button class="btn btn-primary" id="btn-export" onclick="startExport()">Studio → Module</button>
+        <button class="btn btn-danger" id="btn-revert" onclick="startRevert()">Module → Studio</button>
     </div>
     <div class="step-log" id="bridge-log" style="display:none;margin-top:14px;">
-        <pre></pre>
-    </div>
-</div>
-
-<div class="card no-border">
-    <h3>Module Operations</h3>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
-        Install or upgrade a module on an instance via odoo-bin with --stop-after-init.
-    </p>
-    <div class="form-grid">
-        <div class="form-row">
-            <label for="op-instance">Instance</label>
-            <select id="op-instance">
-                <option value="">Select instance...</option>
-                {% for name, inst in instances.items() %}
-                <option value="{{ name }}">{{ name }} (v{{ inst.version | default('19') }}, {{ inst.env }})</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-row">
-            <label for="op-module">Module Name</label>
-            <input type="text" id="op-module" placeholder="e.g. kaminfeger_base">
-        </div>
-    </div>
-    <div style="display:flex;gap:8px;">
-        <button class="btn btn-primary" id="btn-install" onclick="startModuleOp('install')">Install Module</button>
-        <button class="btn btn-secondary" id="btn-upgrade" onclick="startModuleOp('upgrade')">Upgrade Module</button>
-    </div>
-    <div class="step-log" id="op-log" style="display:none;margin-top:14px;">
         <pre></pre>
     </div>
 </div>
@@ -96,7 +68,7 @@
 
 {% block scripts %}
 <script>
-function getSelectedBridge() {
+function getSelected() {
     const sel = document.getElementById('bridge-instance');
     const opt = sel.options[sel.selectedIndex];
     if (!sel.value) return null;
@@ -108,48 +80,50 @@ function getSelectedBridge() {
     };
 }
 
-function setBridgeButtons(disabled) {
+function setButtons(disabled) {
     document.getElementById('btn-export').disabled = disabled;
     document.getElementById('btn-revert').disabled = disabled;
 }
 
 function startExport() {
-    const info = getSelectedBridge();
+    const info = getSelected();
     if (!info) { showToast('Select an instance', 'error'); return; }
 
-    setBridgeButtons(true);
+    setButtons(true);
     const logEl = document.getElementById('bridge-log');
 
-    connectWebSocket('/ws/modules/export', logEl, {
+    connectWebSocket('/ws/studio-bridge/export', logEl, {
         onOpen(ws) {
             ws.send(JSON.stringify({
+                instance_name: info.instance,
                 db_name: info.db_name,
                 client: info.client,
                 version: info.version,
             }));
         },
         onStatus(status) {
-            if (status === 'done') showToast('Export complete', 'success');
+            if (status === 'done') showToast('Export and install complete', 'success');
             if (status === 'error') showToast('Export failed', 'error');
         },
         onClose() {
-            setBridgeButtons(false);
+            setButtons(false);
         }
     });
 }
 
 function startRevert() {
-    const info = getSelectedBridge();
+    const info = getSelected();
     if (!info) { showToast('Select an instance', 'error'); return; }
 
-    if (!confirm('This will revert all module-owned fields back to Studio state. Continue?')) return;
+    if (!confirm('This will revert all module-owned fields back to Studio state and restart the instance. Continue?')) return;
 
-    setBridgeButtons(true);
+    setButtons(true);
     const logEl = document.getElementById('bridge-log');
 
-    connectWebSocket('/ws/modules/prepare-upgrade', logEl, {
+    connectWebSocket('/ws/studio-bridge/revert', logEl, {
         onOpen(ws) {
             ws.send(JSON.stringify({
+                instance_name: info.instance,
                 db_name: info.db_name,
                 client: info.client,
             }));
@@ -159,40 +133,7 @@ function startRevert() {
             if (status === 'error') showToast('Revert failed', 'error');
         },
         onClose() {
-            setBridgeButtons(false);
-        }
-    });
-}
-
-function setOpButtons(disabled) {
-    document.getElementById('btn-install').disabled = disabled;
-    document.getElementById('btn-upgrade').disabled = disabled;
-}
-
-function startModuleOp(operation) {
-    const instance = document.getElementById('op-instance').value;
-    const moduleName = document.getElementById('op-module').value.trim();
-    if (!instance) { showToast('Select an instance', 'error'); return; }
-    if (!moduleName) { showToast('Enter a module name', 'error'); return; }
-
-    setOpButtons(true);
-    const logEl = document.getElementById('op-log');
-
-    connectWebSocket('/ws/modules/operation', logEl, {
-        onOpen(ws) {
-            ws.send(JSON.stringify({
-                instance_name: instance,
-                module_name: moduleName,
-                operation: operation,
-            }));
-        },
-        onStatus(status) {
-            const label = operation === 'install' ? 'Install' : 'Upgrade';
-            if (status === 'done') showToast(`${label} complete`, 'success');
-            if (status === 'error') showToast(`${label} failed`, 'error');
-        },
-        onClose() {
-            setOpButtons(false);
+            setButtons(false);
         }
     });
 }
