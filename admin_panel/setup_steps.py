@@ -877,6 +877,13 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
         await run_cmd(f"rsync -a --delete {prod_addons}/ {target_addons}/", ws_send)
         await run_cmd(f"chown -R odoo:odoo {target_addons}", ws_send)
 
+    # Ensure repo-level files (CLAUDE.md, README.md) are present
+    repo_addons = PLATFORM_DIR / f"odoo{version}" / "addons"
+    for fname in ("CLAUDE.md", "README.md"):
+        src = repo_addons / fname
+        if src.exists():
+            await run_cmd(f"cp {src} {target_addons}/{fname}", ws_send)
+
     # Neutralize the cloned database
     if ws_send:
         await ws_send("Running Odoo neutralize...")
