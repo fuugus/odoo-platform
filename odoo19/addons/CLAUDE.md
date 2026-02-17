@@ -22,9 +22,15 @@ git push                            # share with team
 
 All instances share the same repo. After pushing, other instances get changes via `git pull` or the admin panel's Deploy function.
 
+## Module Architecture
+
+**`{client}_base`** — All custom field and model definitions live here. Studio Bridge converts between Odoo Studio (DB definitions) and this module in both directions, so keeping all definitions in one place ensures clean round-trips. Developers can freely edit this module.
+
+**Other modules** (e.g. `{client}_website`, `{client}_hr`, ...) — Custom logic, controllers, templates, reports, etc. These modules must never define custom fields or models — only reference the ones from `{client}_base` via `depends`.
+
 ## Odoo Module Structure
 
-Each subdirectory here is an Odoo module. A minimal module needs:
+A minimal module needs:
 - `__manifest__.py` — name, version, depends, data files
 - `__init__.py` — Python imports
 - `models/`, `views/`, `security/`, `data/` — as needed

@@ -1,6 +1,6 @@
 # Odoo 19 Custom Addons
 
-Custom modules for Odoo 19 instances managed by the odoo-platform.
+Custom modules for Odoo 19 instances managed by the odoo-platform. Shared via local bare git repo at `/opt/git/odoo19-addons.git`.
 
 ## Development
 

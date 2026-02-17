@@ -1,6 +1,6 @@
 # Odoo 18 Custom Addons
 
-Custom modules for Odoo 18 instances managed by the odoo-platform.
+Custom modules for Odoo 18 instances managed by the odoo-platform. Shared via local bare git repo at `/opt/git/odoo18-addons.git`.
 
 ## Development
 
