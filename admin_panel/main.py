@@ -555,6 +555,31 @@ async def api_set_ssh_key(instance_name: str, request: Request):
     return {"status": "ok"}
 
 
+@app.delete("/api/instances/{instance_name}/ssh-key")
+async def api_reset_ssh_key(instance_name: str):
+    """Reset SSH public key for a dev instance."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+    ssh_user = instance.get("ssh_user")
+    if not ssh_user:
+        raise HTTPException(status_code=400, detail="Not a dev instance")
+
+    version = instance.get("version", "19")
+    data_dir = f"{odoo_base_dir(version)}/data/{instance_name}"
+    auth_keys = f"{data_dir}/.ssh/authorized_keys"
+
+    with open(auth_keys, "w") as f:
+        f.write("")
+
+    shutil.chown(auth_keys, user=ssh_user, group=ssh_user)
+
+    instance["ssh_key_set"] = False
+    save_config(config)
+    return {"status": "ok"}
+
+
 @app.post("/api/instances/{instance_name}/sync-to-repo")
 async def api_sync_to_repo(instance_name: str):
     """Force-push this instance's addons state to the shared repo (overwrites)."""

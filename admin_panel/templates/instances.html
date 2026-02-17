@@ -274,6 +274,7 @@ function showSshSetup(name, sshUser, version) {
                     <code class="pw-value" onclick="copyText(this)" title="Click to copy">ssh ${sshUser}@${host}</code>
                     <label>VS Code</label>
                     <code class="pw-value" onclick="copyText(this)" title="Click to copy">code --remote ssh-remote+${sshUser}@${host} /opt/odoo${version}/data/${name}/addons</code>
+                    <button class="btn btn-sm btn-secondary" style="margin-top:6px;align-self:flex-start" onclick="resetSshKey('${name}', '${sshUser}', '${version}')">Reset Key</button>
                 </div>
             </div>`;
     } else {
@@ -312,6 +313,21 @@ async function saveSshKey(name, sshUser, version) {
             showToast('Failed to save key', 'error');
         }
     } catch (e) { showToast('Failed to save key', 'error'); }
+}
+
+async function resetSshKey(name, sshUser, version) {
+    try {
+        const resp = await fetch(`/api/instances/${name}/ssh-key`, { method: 'DELETE' });
+        if (resp.ok) {
+            showToast('SSH key reset');
+            const icon = document.querySelector(`#row-${name} .icon-key`);
+            if (icon) icon.classList.remove('ssh-active');
+            document.getElementById('ssh-setup-row')?.remove();
+            showSshSetup(name, sshUser, version);
+        } else {
+            showToast('Failed to reset key', 'error');
+        }
+    } catch (e) { showToast('Failed to reset key', 'error'); }
 }
 
 async function syncToRepo(name) {
