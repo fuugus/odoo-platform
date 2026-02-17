@@ -708,6 +708,21 @@ WantedBy=multi-user.target
         await run_cmd(f"chown -R {ssh_user}:{ssh_user} {data_dir}/.ssh", ws_send)
         await run_cmd(f"chmod 700 {data_dir}/.ssh && chmod 600 {data_dir}/.ssh/authorized_keys", ws_send)
 
+        # Grant limited sudo: service control + odoo-bin for module upgrades
+        await run_cmd(f"usermod -aG systemd-journal {ssh_user}", ws_send)
+        sudoers_file = f"/etc/sudoers.d/{ssh_user}"
+        service = f"odoo-{instance_name}"
+        odoo_bin = f"{base}/venv/bin/python3 {base}/odoo/odoo-bin"
+        sudoers_lines = [
+            f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start {service}",
+            f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop {service}",
+            f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart {service}",
+            f"{ssh_user} ALL=(odoo) NOPASSWD: {odoo_bin} *",
+        ]
+        with open(sudoers_file, "w") as f:
+            f.write("\n".join(sudoers_lines) + "\n")
+        await run_cmd(f"chmod 440 {sudoers_file}", ws_send)
+
     # Update config
     config = load_config()
     inst_config = {
@@ -774,9 +789,10 @@ async def delete_odoo_instance(instance_name: str, ws_send=None):
         ws_send,
     )
 
-    # Remove SSH user if exists
+    # Remove SSH user and sudoers if exists
     ssh_user = instance.get("ssh_user")
     if ssh_user:
+        await run_cmd(f"rm -f /etc/sudoers.d/{ssh_user}", ws_send)
         await run_cmd(f"userdel {ssh_user} 2>/dev/null || true", ws_send)
 
     # Clean up data directory

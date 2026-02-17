@@ -9,7 +9,7 @@ You are working inside an Odoo 18 instance's custom addons directory.
 - **Instance config:** `/etc/odoo/<instance_name>.conf`
 - **Instance data:** `/opt/odoo18/data/<instance_name>/`
 - **Logs:** `/var/log/odoo/<instance_name>.log`
-- **Instance name** = directory name under `data/`, e.g. `client_dev_name`
+- **Instance name** = directory name under `data/` (e.g. `client_dev_name`)
 
 ## Odoo Module Structure
 
@@ -23,35 +23,23 @@ Each subdirectory here is an Odoo module. A minimal module needs:
 Dev instances (workers=0) auto-reload Python and XML changes. For a full restart:
 
 ```bash
-# Find your instance service
-systemctl list-units 'odoo-*' --no-pager
-
-# Restart it
+# Restart your instance
 sudo systemctl restart odoo-<instance_name>
 
 # Tail logs
-sudo journalctl -u odoo-<instance_name> -f
+journalctl -u odoo-<instance_name> -f
 ```
 
-To install or upgrade a module, restart with:
+To install or upgrade a module:
 ```bash
 sudo systemctl stop odoo-<instance_name>
-sudo /opt/odoo18/venv/bin/python3 /opt/odoo18/odoo/odoo-bin \
+sudo -u odoo /opt/odoo18/venv/bin/python3 /opt/odoo18/odoo/odoo-bin \
     -c /etc/odoo/<instance_name>.conf \
     -d <instance_name> \
     -u <module_name> \
     --stop-after-init --logfile=
 sudo systemctl start odoo-<instance_name>
 ```
-
-## Platform Admin Panel
-
-The instance is managed by an admin panel at `https://admin.odoo.<domain>/`. It handles:
-- Instance creation/deletion, sync from prod, deploy, SSL
-- Studio Bridge (export Odoo Studio customizations to code modules)
-- SSH key management, admin password verification
-
-Developers cannot access the admin panel directly. Ask the project admin for instance operations.
 
 ## Database Access
 
