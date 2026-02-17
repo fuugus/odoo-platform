@@ -315,15 +315,16 @@ async function saveSshKey(name, sshUser, version) {
 }
 
 async function syncToRepo(name) {
-    if (!confirm(`Sync addons from ${name} to the repo? This overwrites the repo's addons directory.`)) return;
+    if (!confirm(`Force-sync addons from ${name} to the shared repo?\n\nThis OVERWRITES the repo with this instance's current state. Changes from other instances that are not on this instance will be lost.`)) return;
     try {
         const resp = await fetch(`/api/instances/${name}/sync-to-repo`, {method: 'POST'});
+        const data = await resp.json();
         if (resp.ok) {
-            showToast('Addons synced to repo');
+            showToast(data.message || 'Changes pushed to repo');
         } else {
-            showToast('Sync failed', 'error');
+            showToast(data.detail || 'Push failed', 'error');
         }
-    } catch (e) { showToast('Sync failed', 'error'); }
+    } catch (e) { showToast('Push failed', 'error'); }
 }
 
 function copyText(el) {

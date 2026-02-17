@@ -1,15 +1,26 @@
 # CLAUDE.md — Odoo 19 Custom Addons
 
-You are working inside an Odoo 19 instance's custom addons directory.
+You are working inside an Odoo 19 instance's custom addons directory. This directory is a git working tree shared across all instances via a local bare repo at `/opt/git/odoo19-addons.git`.
 
 ## Where You Are
 
-- **This directory:** Custom addons for one Odoo 19 instance
+- **This directory:** Custom addons for one Odoo 19 instance (git repo)
+- **Shared repo:** `/opt/git/odoo19-addons.git` (bare, all instances share this)
 - **Odoo source:** `/opt/odoo19/odoo/` (community), `/opt/odoo19/enterprise/` (enterprise)
 - **Instance config:** `/etc/odoo/<instance_name>.conf`
 - **Instance data:** `/opt/odoo19/data/<instance_name>/`
 - **Logs:** `/var/log/odoo/<instance_name>.log`
 - **Instance name** = directory name under `data/` (e.g. `client_dev_name`)
+
+## Git Workflow
+
+```bash
+git pull                            # get latest from other devs
+git add -A && git commit -m "..."   # commit your changes
+git push                            # share with team
+```
+
+All instances share the same repo. After pushing, other instances get changes via `git pull` or the admin panel's Deploy function.
 
 ## Odoo Module Structure
 
@@ -23,7 +34,6 @@ Each subdirectory here is an Odoo module. A minimal module needs:
 Dev instances (workers=0) auto-reload Python and XML changes. For a full restart:
 
 ```bash
-# Restart your instance
 sudo systemctl restart odoo-<instance_name>
 
 # Tail logs

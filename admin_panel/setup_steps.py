@@ -576,16 +576,21 @@ async def create_odoo_instance(client: str, env: str, port: int, workers: int = 
     master_pw = _generate_password()
     admin_pw = _generate_password()
 
-    await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir} {instance_addons}", ws_send)
+    await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir}", ws_send)
     await run_cmd(f"chown odoo:odoo {data_dir} {log_dir}", ws_send)
 
-    # Copy custom addons from repo to instance
-    repo_addons = PLATFORM_DIR / f"odoo{version}" / "addons"
-    if repo_addons.exists() and any(p for p in repo_addons.iterdir() if p.name != ".gitkeep"):
+    # Clone custom addons from local bare repo
+    bare_repo = f"/opt/git/odoo{version}-addons.git"
+    if Path(bare_repo).exists():
         if ws_send:
-            await ws_send("Copying custom addons to instance...")
-        await run_cmd(f"rsync -a --exclude='.git' --exclude='.gitkeep' {repo_addons}/ {instance_addons}/", ws_send)
+            await ws_send("Cloning addons from local git repo...")
+        await run_cmd(f"git clone {bare_repo} {instance_addons}", ws_send)
         await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws_send)
+        await run_cmd(f"git -C {instance_addons} config user.name Deploy", ws_send)
+        await run_cmd(f"git -C {instance_addons} config user.email deploy@odoo-platform", ws_send)
+    else:
+        await run_cmd(f"mkdir -p {instance_addons}", ws_send)
+        await run_cmd(f"chown odoo:odoo {instance_addons}", ws_send)
 
     # Determine SMTP settings
     if env == "prod":
@@ -703,6 +708,11 @@ WantedBy=multi-user.target
         await run_cmd(f"chmod 755 {data_dir}", ws_send)
         await run_cmd(f"chown -R {ssh_user}:odoo {instance_addons}", ws_send)
         await run_cmd(f"chmod -R g+ws {instance_addons}", ws_send)
+        # Configure git identity for dev user
+        await run_cmd(f"git -C {instance_addons} config user.name {dev_name.capitalize()}", ws_send)
+        await run_cmd(f"git -C {instance_addons} config user.email {dev_name}@odoo-platform", ws_send)
+        await run_cmd(f"git config -f {data_dir}/.gitconfig --add safe.directory '*'", ws_send)
+        await run_cmd(f"chown {ssh_user}:odoo {data_dir}/.gitconfig", ws_send)
         await run_cmd(f"mkdir -p {data_dir}/.ssh", ws_send)
         await run_cmd(f"touch {data_dir}/.ssh/authorized_keys", ws_send)
         await run_cmd(f"chown -R {ssh_user}:{ssh_user} {data_dir}/.ssh", ws_send)
@@ -884,21 +894,15 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
         if ws_send:
             await ws_send("No filestore to copy (prod filestore not found)")
 
-    # Copy custom addons from prod
-    prod_addons = f"{prod_data_dir}/addons"
+    # Pull latest addons from git repo
     target_addons = f"{target_data_dir}/addons"
-    if Path(prod_addons).exists():
+    if Path(f"{target_addons}/.git").exists():
         if ws_send:
-            await ws_send("Copying custom addons from prod...")
-        await run_cmd(f"rsync -a --delete {prod_addons}/ {target_addons}/", ws_send)
-        await run_cmd(f"chown -R odoo:odoo {target_addons}", ws_send)
-
-    # Ensure repo-level files (CLAUDE.md, README.md) are present
-    repo_addons = PLATFORM_DIR / f"odoo{version}" / "addons"
-    for fname in ("CLAUDE.md", "README.md"):
-        src = repo_addons / fname
-        if src.exists():
-            await run_cmd(f"cp {src} {target_addons}/{fname}", ws_send)
+            await ws_send("Pulling latest addons from git repo...")
+        await run_cmd(f"git -C {target_addons} fetch origin", ws_send)
+        await run_cmd(f"git -C {target_addons} reset --hard origin/main", ws_send)
+        owner = target.get("ssh_user", "odoo")
+        await run_cmd(f"chown -R {owner}:odoo {target_addons}", ws_send)
 
     # Neutralize the cloned database
     if ws_send:

@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Deploy</h1>
-    <p>Git Pull → Copy to Instance → Service Restart</p>
+    <p>Git Pull → Service Restart</p>
 </div>
 
 <div class="card">
@@ -34,36 +34,17 @@
             <span class="workflow-num">1</span>
             <div>
                 <strong>Git Pull</strong>
-                <p>Pulls latest from the version's custom-addons repository</p>
+                <p>Pulls latest from the local addons repo (<code>/opt/git/odoo{ver}-addons.git</code>)</p>
             </div>
         </div>
         <div class="workflow-step">
             <span class="workflow-num">2</span>
             <div>
-                <strong>Copy to Instance</strong>
-                <p>Syncs custom addons to the instance's own addons directory</p>
-            </div>
-        </div>
-        <div class="workflow-step">
-            <span class="workflow-num">3</span>
-            <div>
                 <strong>Service Restart</strong>
-                <p>Restarts the Odoo instance so new modules are loaded</p>
+                <p>Restarts the Odoo instance so new/updated modules are loaded</p>
             </div>
         </div>
     </div>
-</div>
-
-<div class="card no-border">
-    <h3>Git Branch Conventions</h3>
-    <table class="data-table">
-        <thead><tr><th>Pattern</th><th>Example</th><th>Description</th></tr></thead>
-        <tbody>
-            <tr><td><code>{env}/{client}/{feature}</code></td><td><code>staging/kaminfeger/feuko-reports</code></td><td>Feature branch for staging</td></tr>
-            <tr><td><code>dev/{client}/{feature}</code></td><td><code>dev/kaminfeger/new-wizard</code></td><td>Development branch</td></tr>
-            <tr><td><code>main</code></td><td><code>main</code></td><td>Production branch</td></tr>
-        </tbody>
-    </table>
 </div>
 {% endblock %}
 

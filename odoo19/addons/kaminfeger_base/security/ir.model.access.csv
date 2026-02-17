@@ -1,9 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_x_abschluss_abschluss_group_user,Abschluss group_user,model_x_abschluss,base.group_user,1,1,1,0
-access_x_abschluss_abschluss_group_system,Abschluss group_system,model_x_abschluss,base.group_system,1,1,1,1
-access_x_datei_datei_group_user,Datei group_user,model_x_datei,base.group_user,1,1,1,0
-access_x_datei_datei_group_system,Datei group_system,model_x_datei,base.group_system,1,1,1,1
-access_x_datei_datei_public_read,Datei Public Read,model_x_datei,base.group_public,1,0,0,0
-access_x_kategorie_kategorie_group_user,Kategorie group_user,model_x_kategorie,base.group_user,1,1,1,0
-access_x_kategorie_kategorie_group_system,Kategorie group_system,model_x_kategorie,base.group_system,1,1,1,1
-access_x_kategorie_kategorie_public_read,Kategorie Public Read,model_x_kategorie,base.group_public,1,0,0,0

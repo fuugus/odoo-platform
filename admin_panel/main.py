@@ -554,27 +554,39 @@ async def api_set_ssh_key(instance_name: str, request: Request):
 
 @app.post("/api/instances/{instance_name}/sync-to-repo")
 async def api_sync_to_repo(instance_name: str):
-    """Sync addons from a dev instance back to the repo."""
+    """Force-push this instance's addons state to the shared repo (overwrites)."""
     config = load_config()
     instance = config["instances"].get(instance_name)
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
-    if not instance.get("ssh_user"):
-        raise HTTPException(status_code=400, detail="Not a dev instance")
 
     version = instance.get("version", "19")
-    src = f"{odoo_base_dir(version)}/data/{instance_name}/addons/"
-    dst = str(PLATFORM_DIR / f"odoo{version}" / "addons/")
+    addons = f"{odoo_base_dir(version)}/data/{instance_name}/addons"
 
-    result = subprocess.run(
-        ["rsync", "-a", "--delete", "--exclude=.git", "--exclude=__pycache__",
-         "--exclude=.gitkeep", src, dst],
+    if not Path(f"{addons}/.git").exists():
+        raise HTTPException(status_code=400, detail="No git repo in addons directory")
+
+    # Stage, commit, and force-push to overwrite shared repo
+    subprocess.run(["git", "-C", addons, "add", "-A"], capture_output=True, timeout=10)
+    status = subprocess.run(
+        ["git", "-C", addons, "status", "--porcelain"],
+        capture_output=True, text=True, timeout=10,
+    )
+    if not status.stdout.strip():
+        return {"status": "ok", "message": "Nothing to sync — already up to date"}
+
+    subprocess.run(
+        ["git", "-C", addons, "commit", "-m", f"Sync from {instance_name}"],
+        capture_output=True, text=True, timeout=10,
+    )
+    push = subprocess.run(
+        ["git", "-C", addons, "push", "--force"],
         capture_output=True, text=True, timeout=30,
     )
-    if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=result.stderr)
+    if push.returncode != 0:
+        raise HTTPException(status_code=500, detail=push.stderr)
 
-    return {"status": "ok"}
+    return {"status": "ok", "message": "Addons synced to repo"}
 
 
 @app.get("/api/databases")
@@ -627,10 +639,9 @@ async def api_delete_database(db_name: str):
 
 @app.post("/api/deploy")
 async def api_deploy(request: Request):
-    """Deploy: git pull custom addons, copy to instance, restart."""
+    """Deploy: git pull addons from local bare repo, restart instance."""
     data = await request.json()
     instance_name = data.get("instance")
-    modules = data.get("modules", "all")
 
     config = load_config()
     instance = config["instances"].get(instance_name)
@@ -639,24 +650,23 @@ async def api_deploy(request: Request):
 
     version = instance.get("version", "19")
     base = odoo_base_dir(version)
-    repo_addons = Path(PLATFORM_DIR) / f"odoo{version}" / "addons"
     instance_addons = f"{base}/data/{instance_name}/addons"
 
-    # Sync custom addons from repo to instance
+    # Git pull from local bare repo
     git_output = ""
-    if repo_addons.exists() and any(p for p in repo_addons.iterdir() if p.name != ".gitkeep"):
-        subprocess.run(
-            ["rsync", "-a", "--exclude=.git", "--exclude=.gitkeep", f"{repo_addons}/", f"{instance_addons}/"],
-            capture_output=True, timeout=60
+    if Path(f"{instance_addons}/.git").exists():
+        result = subprocess.run(
+            ["git", "-C", instance_addons, "pull"],
+            capture_output=True, text=True, timeout=30,
         )
+        git_output = result.stdout.strip() or result.stderr.strip()
+        owner = instance.get("ssh_user", "odoo")
         subprocess.run(
-            ["chown", "-R", "odoo:odoo", instance_addons],
-            capture_output=True, timeout=10
+            ["chown", "-R", f"{owner}:odoo", instance_addons],
+            capture_output=True, timeout=10,
         )
-        addons_list = [p.name for p in repo_addons.iterdir() if p.is_dir() and p.name != ".git"]
-        git_output = f"Synced {len(addons_list)} module(s): {', '.join(addons_list)}"
     else:
-        git_output = "(no custom addons found)"
+        git_output = "(no git repo in addons directory)"
 
     # Restart the service to pick up changes
     service = instance["service"]
@@ -829,7 +839,8 @@ async def ws_studio_bridge_export(websocket: WebSocket):
             await websocket.send_json({"type": "log", "message": message})
 
         await websocket.send_json({"type": "status", "status": "running"})
-        await export_studio_to_module(db_name, client, version, ws_send)
+        instance_addons = f"{odoo_base_dir(version)}/data/{instance_name}/addons"
+        await export_studio_to_module(db_name, client, version, ws_send, addons_dir=instance_addons)
         await ws_send(f"\n{'=' * 50}")
         await ws_send(f"Installing {module_name} on {instance_name}...")
         await ws_send(f"{'=' * 50}\n")

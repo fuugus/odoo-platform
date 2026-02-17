@@ -188,8 +188,15 @@ def get_studio_stats(db_name, client, addon_names=None):
 def get_custom_addons_info(config):
     result = {}
     for ver in ["19", "18"]:
-        addons_dir = Path(PLATFORM_DIR) / f"odoo{ver}" / "addons"
-        if not addons_dir.exists():
+        # Find first instance's addons dir for this version
+        addons_dir = None
+        for inst_name, inst in config.get("instances", {}).items():
+            if inst.get("version", "19") == ver:
+                candidate = Path(odoo_base_dir(ver)) / "data" / inst_name / "addons"
+                if candidate.exists():
+                    addons_dir = candidate
+                    break
+        if not addons_dir:
             continue
         addons = []
         for addon_path in sorted(addons_dir.iterdir()):
@@ -325,11 +332,14 @@ def _python_field_line(field, selections_map):
     return f"    {fname} = fields.{py_type}({args})"
 
 
-async def export_studio_to_module(db_name, client, version, ws_send=None):
+async def export_studio_to_module(db_name, client, version, ws_send=None, addons_dir=None):
     ws = ws_send or (lambda m: None)
 
     module_name = f"{client}_base"
-    addons_dir = Path(PLATFORM_DIR) / f"odoo{version}" / "addons"
+    if addons_dir is None:
+        addons_dir = Path(PLATFORM_DIR) / f"odoo{version}" / "addons"
+    else:
+        addons_dir = Path(addons_dir)
     module_dir = addons_dir / module_name
     models_dir = module_dir / "models"
     security_dir = module_dir / "security"
@@ -797,21 +807,27 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
         cur.close()
         conn.close()
 
-    # Clean up generated module files from repo
-    for ver in ["19", "18"]:
-        mod_path = Path(PLATFORM_DIR) / f"odoo{ver}" / "addons" / module_name
-        if mod_path.exists():
-            shutil.rmtree(mod_path)
-            await ws(f"Removed {mod_path}")
-
-    # Clean up deployed copy from instance addons
+    # Clean up generated module from all instance addons and push removal
     config = load_config()
+    pushed = False
     for inst_name, inst in config.get("instances", {}).items():
         if inst.get("client") == client:
-            deployed = Path(odoo_base_dir(inst["version"])) / "data" / inst_name / "addons" / module_name
-            if deployed.exists():
-                shutil.rmtree(deployed)
-                await ws(f"Removed {deployed}")
+            inst_addons = Path(odoo_base_dir(inst["version"])) / "data" / inst_name / "addons"
+            mod_path = inst_addons / module_name
+            if mod_path.exists():
+                shutil.rmtree(mod_path)
+                await ws(f"Removed {mod_path}")
+            # Git commit/push from first instance that has a repo
+            if not pushed and (inst_addons / ".git").exists():
+                import subprocess
+                subprocess.run(["git", "-C", str(inst_addons), "add", "-A"], capture_output=True, timeout=10)
+                subprocess.run(
+                    ["git", "-C", str(inst_addons), "commit", "-m", f"Revert: remove {module_name}"],
+                    capture_output=True, timeout=10,
+                )
+                subprocess.run(["git", "-C", str(inst_addons), "push"], capture_output=True, timeout=30)
+                pushed = True
+                await ws(f"Pushed module removal to git repo")
 
 
 async def install_or_upgrade_module(instance_name, module_name, operation, ws_send=None):
@@ -828,7 +844,6 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     conf_path = instance["conf"]
     service = instance["service"]
 
-    repo_addons = Path(PLATFORM_DIR) / f"odoo{version}" / "addons"
     instance_addons = f"{base}/data/{instance_name}/addons"
 
     flag = "-i" if operation == "install" else "-u"
@@ -840,14 +855,16 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     await ws(f"Stopping {service}...")
     await run_cmd(f"systemctl stop {service}", ws)
 
-    # Rsync custom addons
-    if repo_addons.exists():
-        await ws("Syncing custom addons from repo...")
+    # Commit and push addons changes to shared repo
+    if Path(f"{instance_addons}/.git").exists():
+        await ws("Committing addons to git repo...")
+        await run_cmd(f"git -C {instance_addons} add -A", ws)
         await run_cmd(
-            f"rsync -a --exclude=.git --exclude=.gitkeep {repo_addons}/ {instance_addons}/",
+            f"git -C {instance_addons} diff --cached --quiet || "
+            f"git -C {instance_addons} commit -m 'Studio Bridge: {op_label.lower()} {module_name}'",
             ws,
         )
-        await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws)
+        await run_cmd(f"git -C {instance_addons} push", ws)
 
     # Pre-install: reclaim studio_customization records and reset states so
     # odoo-bin can properly initialize the module. Without this:
