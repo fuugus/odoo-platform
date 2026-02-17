@@ -494,17 +494,6 @@ input:focus, select:focus {
 .badge-dev, [class*="badge-dev_"] { background: #e3ecfb; color: #2454a0; }
 .badge-system { background: var(--secondary); color: var(--text-muted); }
 
-.alert-warning {
-    background: #fff3db;
-    border-left: 3px solid #d4a20a;
-    color: #5a4a0a;
-    padding: 10px 14px;
-    font-size: 13px;
-    line-height: 1.6;
-    border-radius: 3px;
-    margin-bottom: 16px;
-}
-
 /* ─── Status Dots ────────────────────────────────────────────────────────── */
 
 .status-dot {

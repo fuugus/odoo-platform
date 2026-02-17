@@ -147,29 +147,6 @@ def get_studio_stats(db_name, client, addon_names=None):
         """, (module_name,))
         studio_views = cur.fetchone()["cnt"]
 
-        # Custom fields defined in other modules (not client_base, not studio_customization)
-        cur.execute("""
-            SELECT d.module, f.name, f.model
-            FROM ir_model_data d
-            JOIN ir_model_fields f ON d.res_id = f.id
-            WHERE d.model = 'ir.model.fields'
-              AND f.name LIKE 'x\\_%%'
-              AND (f.related IS NULL OR f.related = '')
-              AND d.module NOT IN (%s, 'studio_customization', 'base')
-        """, (module_name,))
-        misplaced_fields = [dict(r) for r in cur.fetchall()]
-
-        # Custom models defined in other modules
-        cur.execute("""
-            SELECT d.module, m.model
-            FROM ir_model_data d
-            JOIN ir_model m ON d.res_id = m.id
-            WHERE d.model = 'ir.model'
-              AND m.model LIKE 'x\\_%%'
-              AND d.module NOT IN (%s, 'studio_customization', 'base')
-        """, (module_name,))
-        misplaced_models = [dict(r) for r in cur.fetchall()]
-
         # Module state
         cur.execute("SELECT state FROM ir_module_module WHERE name = %s", (module_name,))
         row = cur.fetchone()
@@ -202,8 +179,6 @@ def get_studio_stats(db_name, client, addon_names=None):
             "module_state": module_state,
             "module_name": module_name,
             "has_customizations": total_fields > 0 or total_models > 0 or total_views > 0,
-            "misplaced_fields": misplaced_fields,
-            "misplaced_models": misplaced_models,
             "addons": addons,
         }
     except Exception as e:

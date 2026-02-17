@@ -47,8 +47,6 @@
     </div>
 </div>
 
-<div id="misplaced-warning" style="display:none;"></div>
-
 <div id="addons-card" class="card" style="display:none;">
     <h3 id="addons-title">Deployed Addons</h3>
     <div id="addons-content"></div>
@@ -185,22 +183,6 @@ async function fetchStats(instanceName) {
             stateEl.innerHTML = '<span class="badge badge-staging">uninstalled</span>';
         } else {
             stateEl.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">no module</span>';
-        }
-
-        // Show misplaced definitions warning
-        const warnEl = document.getElementById('misplaced-warning');
-        const mf = data.misplaced_fields || [];
-        const mm = data.misplaced_models || [];
-        if (warnEl) {
-            if (mf.length + mm.length > 0) {
-                let items = [];
-                mf.forEach(f => items.push(`Field <b>${f.name}</b> on ${f.model} (in ${f.module})`));
-                mm.forEach(m => items.push(`Model <b>${m.model}</b> (in ${m.module})`));
-                warnEl.innerHTML = '<div class="alert alert-warning"><b>Definitions in wrong module</b> — these must be in ' + data.module_name + ' for Studio Bridge to work:<br>' + items.join('<br>') + '</div>';
-                warnEl.style.display = 'block';
-            } else {
-                warnEl.style.display = 'none';
-            }
         }
 
         renderAddons(data.instance_addons, data.addons || {});
