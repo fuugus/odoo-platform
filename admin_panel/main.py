@@ -547,6 +547,9 @@ async def api_set_ssh_key(instance_name: str, request: Request):
     with open(auth_keys, "w") as f:
         f.write(public_key + "\n")
 
+    shutil.chown(auth_keys, user=ssh_user, group=ssh_user)
+    shutil.chown(f"{data_dir}/.ssh", user=ssh_user, group=ssh_user)
+
     instance["ssh_key_set"] = True
     save_config(config)
     return {"status": "ok"}

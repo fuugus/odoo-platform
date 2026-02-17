@@ -889,7 +889,7 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
         await run_cmd(f"rm -rf {target_filestore}", ws_send)
         await run_cmd(f"mkdir -p {target_data_dir}/filestore", ws_send)
         await run_cmd(f"cp -a {prod_filestore} {target_filestore}", ws_send)
-        await run_cmd(f"chown -R odoo:odoo {target_data_dir}", ws_send)
+        await run_cmd(f"chown -R odoo:odoo {target_data_dir}/filestore", ws_send)
     else:
         if ws_send:
             await ws_send("No filestore to copy (prod filestore not found)")
