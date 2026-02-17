@@ -42,7 +42,7 @@
         <div class="stat-detail" id="stat-views-detail"></div>
     </div>
     <div class="stat-card card">
-        <div class="stat-label">Module</div>
+        <div class="stat-label">Base Module</div>
         <div class="stat-value" id="stat-module">-</div>
     </div>
 </div>
@@ -63,6 +63,7 @@
     <div style="display:flex;gap:8px;">
         <button class="btn btn-primary" id="btn-export" onclick="startExport()" disabled>Studio → Module</button>
         <button class="btn btn-danger" id="btn-revert" onclick="startRevert()" disabled>Module → Studio</button>
+        <button class="btn" id="btn-fix-misplaced" onclick="startFixMisplaced()" style="display:none;background:#555;">Fix Misplaced</button>
     </div>
     <div class="step-log" id="bridge-log" style="display:none;margin-top:14px;">
         <pre></pre>
@@ -87,6 +88,9 @@ function getSelected() {
 function setButtons(disabled) {
     document.getElementById('btn-export').disabled = disabled;
     document.getElementById('btn-revert').disabled = disabled;
+    const fixBtn = document.getElementById('btn-fix-misplaced');
+    if (disabled) fixBtn.disabled = true;
+    else fixBtn.disabled = false;
 }
 
 async function onInstanceChange() {
@@ -195,8 +199,9 @@ async function fetchStats(instanceName) {
             stateEl.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">no module</span>';
         }
 
-        // Misplaced definitions banner
+        // Misplaced definitions banner + fix button visibility
         const warnEl = document.getElementById('misplaced-warning');
+        const fixBtn = document.getElementById('btn-fix-misplaced');
         if (misplacedTotal > 0) {
             let lines = [];
             (data.misplaced_fields || []).forEach(f => {
@@ -208,8 +213,10 @@ async function fetchStats(instanceName) {
             warnEl.innerHTML = '<div style="background:#fff3db;border-left:3px solid #d4a20a;color:#5a4a0a;padding:10px 14px;font-size:13px;line-height:1.8;border-radius:3px;">'
                 + '<b>Misplaced definitions</b><br>' + lines.join('<br>') + '</div>';
             warnEl.style.display = '';
+            fixBtn.style.display = '';
         } else {
             warnEl.style.display = 'none';
+            fixBtn.style.display = 'none';
         }
 
         renderAddons(data.instance_addons, data.addons || {});
@@ -270,6 +277,37 @@ function startRevert() {
                 fetchStats(info.instance);
             }
             if (status === 'error') showToast('Revert failed', 'error');
+        },
+        onClose() {
+            setButtons(false);
+        }
+    });
+}
+
+function startFixMisplaced() {
+    const info = getSelected();
+    if (!info) { showToast('Select an instance', 'error'); return; }
+
+    if (!confirm('Move misplaced definitions to studio_customization and clean up source files? You can revert via git if needed.')) return;
+
+    setButtons(true);
+    const logEl = document.getElementById('bridge-log');
+
+    connectWebSocket('/ws/studio-bridge/fix-misplaced', logEl, {
+        onOpen(ws) {
+            ws.send(JSON.stringify({
+                instance_name: info.instance,
+                db_name: info.db_name,
+                client: info.client,
+                version: info.version,
+            }));
+        },
+        onStatus(status) {
+            if (status === 'done') {
+                showToast('Misplaced definitions fixed', 'success');
+                fetchStats(info.instance);
+            }
+            if (status === 'error') showToast('Fix failed', 'error');
         },
         onClose() {
             setButtons(false);

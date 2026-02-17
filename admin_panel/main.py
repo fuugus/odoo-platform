@@ -31,6 +31,7 @@ from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser
 from studio_bridge import (
     get_custom_addons_info, get_instance_addons, get_studio_stats,
     export_studio_to_module, convert_module_to_studio, install_or_upgrade_module,
+    fix_misplaced_definitions,
 )
 
 _public_ip_cache = None
@@ -874,6 +875,40 @@ async def ws_studio_bridge_export(websocket: WebSocket):
         await ws_send(f"Installing {module_name} on {instance_name}...")
         await ws_send(f"{'=' * 50}\n")
         await install_or_upgrade_module(instance_name, module_name, "install", ws_send)
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
+    finally:
+        await websocket.close()
+
+
+@app.websocket("/ws/studio-bridge/fix-misplaced")
+async def ws_studio_bridge_fix_misplaced(websocket: WebSocket):
+    """Fix misplaced field/model definitions by moving them to studio_customization."""
+    await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
+    try:
+        data = await websocket.receive_json()
+        instance_name = data.get("instance_name")
+        db_name = data.get("db_name")
+        client = data.get("client")
+        version = data.get("version", "19")
+
+        if not db_name or not client or not instance_name:
+            raise ValueError("instance_name, db_name and client are required")
+
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await fix_misplaced_definitions(db_name, client, version, instance_name, ws_send)
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})

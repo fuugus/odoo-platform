@@ -218,6 +218,236 @@ def get_studio_stats(db_name, client, addon_names=None):
         return {"error": str(e)}
 
 
+async def fix_misplaced_definitions(db_name, client, version, instance_name, ws_send=None):
+    """Move misplaced field/model definitions back to studio_customization.
+
+    For each misplaced field/model (owned by a custom module other than {client}_base):
+    1. Transfer ir_model_data ownership to studio_customization
+    2. Set state='manual' so Studio Bridge export picks them up
+    3. Remove field definitions from the source module's Python files
+    4. Git commit the file changes
+
+    After running this, the user should run Studio → Module to include them in {client}_base.
+    """
+    async def ws(msg):
+        if ws_send:
+            await ws_send(msg)
+
+    module_name = f"{client}_base"
+    addons_dir = Path(odoo_base_dir(version)) / "data" / instance_name / "addons"
+
+    stats = get_studio_stats(db_name, client)
+    if "error" in stats:
+        raise RuntimeError(f"Failed to get stats: {stats['error']}")
+
+    misplaced_fields = stats.get("misplaced_fields", [])
+    misplaced_models = stats.get("misplaced_models", [])
+
+    if not misplaced_fields and not misplaced_models:
+        await ws("No misplaced definitions found.")
+        return
+
+    await ws(f"Found {len(misplaced_fields)} misplaced field(s), {len(misplaced_models)} misplaced model(s)")
+
+    conn = get_db_connection(db_name)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    try:
+        # --- DB: Transfer ownership to studio_customization, set state=manual ---
+        for f in misplaced_fields:
+            await ws(f"  Transferring field {f['name']} on {f['model']} from {f['module']} to studio_customization...")
+            cur.execute("""
+                UPDATE ir_model_data
+                SET module = 'studio_customization'
+                WHERE module = %s AND model = 'ir.model.fields'
+                  AND res_id = (
+                      SELECT id FROM ir_model_fields
+                      WHERE name = %s AND model = %s LIMIT 1
+                  )
+            """, (f["module"], f["name"], f["model"]))
+            cur.execute("""
+                UPDATE ir_model_fields SET state = 'manual'
+                WHERE name = %s AND model = %s
+            """, (f["name"], f["model"]))
+
+        for m in misplaced_models:
+            await ws(f"  Transferring model {m['model']} from {m['module']} to studio_customization...")
+            cur.execute("""
+                UPDATE ir_model_data
+                SET module = 'studio_customization'
+                WHERE module = %s AND model = 'ir.model'
+                  AND res_id = (
+                      SELECT id FROM ir_model m
+                      WHERE m.model = %s LIMIT 1
+                  )
+            """, (m["module"], m["model"]))
+            cur.execute("""
+                UPDATE ir_model SET state = 'manual'
+                WHERE model = %s
+            """, (m["model"],))
+
+        conn.commit()
+        await ws("DB ownership transferred successfully.")
+
+        # --- Files: Remove field definitions from source modules ---
+        # Group misplaced items by (module, odoo_model) for efficient file editing
+        affected_modules = set()
+        fields_by_module_model = {}
+        for f in misplaced_fields:
+            key = (f["module"], f["model"])
+            fields_by_module_model.setdefault(key, []).append(f["name"])
+            affected_modules.add(f["module"])
+        for m in misplaced_models:
+            affected_modules.add(m["module"])
+
+        for mod in sorted(affected_modules):
+            mod_dir = addons_dir / mod
+            if not mod_dir.exists():
+                await ws(f"  Warning: module directory {mod} not found, skipping file cleanup")
+                continue
+
+            models_dir = mod_dir / "models"
+            if not models_dir.exists():
+                continue
+
+            await ws(f"  Cleaning up files in {mod}/models/...")
+
+            # Find all Python files that might contain field definitions
+            for py_file in sorted(models_dir.glob("*.py")):
+                if py_file.name == "__init__.py":
+                    continue
+
+                source = py_file.read_text()
+                try:
+                    tree = ast.parse(source)
+                except SyntaxError:
+                    await ws(f"    Warning: could not parse {py_file.name}, skipping")
+                    continue
+
+                # Collect field names to remove from this file
+                fields_to_remove = set()
+                for (fmod, fmodel), fnames in fields_by_module_model.items():
+                    if fmod == mod:
+                        fields_to_remove.update(fnames)
+
+                # Also collect model names to remove (for custom model classes)
+                models_to_remove = set()
+                for m in misplaced_models:
+                    if m["module"] == mod:
+                        models_to_remove.add(m["model"])
+
+                # Walk AST to find assignments to remove
+                lines = source.splitlines(keepends=True)
+                lines_to_remove = set()
+
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.ClassDef):
+                        continue
+
+                    # Check if this class has _inherit or _name matching our targets
+                    class_model = None
+                    for stmt in node.body:
+                        if isinstance(stmt, ast.Assign):
+                            for target in stmt.targets:
+                                if isinstance(target, ast.Name) and target.id in ("_inherit", "_name"):
+                                    if isinstance(stmt.value, ast.Constant):
+                                        class_model = stmt.value.value
+
+                    if not class_model:
+                        continue
+
+                    # Check if entire model class should be removed
+                    if class_model in models_to_remove:
+                        for line_no in range(node.lineno, node.end_lineno + 1):
+                            lines_to_remove.add(line_no)
+                        continue
+
+                    # Remove specific field assignments
+                    for stmt in node.body:
+                        if isinstance(stmt, ast.Assign):
+                            for target in stmt.targets:
+                                if isinstance(target, ast.Name) and target.id in fields_to_remove:
+                                    for line_no in range(stmt.lineno, stmt.end_lineno + 1):
+                                        lines_to_remove.add(line_no)
+
+                if not lines_to_remove:
+                    continue
+
+                # Check if removing these lines leaves an empty class
+                # A class with only _inherit/_name and no field/method defs is empty
+                file_has_content = False
+                for node in ast.iter_child_nodes(tree):
+                    if isinstance(node, ast.ClassDef):
+                        for stmt in node.body:
+                            stmt_lines = set(range(stmt.lineno, stmt.end_lineno + 1))
+                            if stmt_lines.issubset(lines_to_remove):
+                                continue
+                            # _inherit and _name assignments don't count as content
+                            if isinstance(stmt, ast.Assign):
+                                target_names = [t.id for t in stmt.targets if isinstance(t, ast.Name)]
+                                if all(n in ("_inherit", "_name", "_description") for n in target_names):
+                                    continue
+                            file_has_content = True
+                            break
+
+                if not file_has_content:
+                    await ws(f"    Removing {py_file.name} (no definitions left)")
+                    py_file.unlink()
+                    _remove_from_init(models_dir / "__init__.py", py_file.stem)
+                else:
+                    # Rewrite file without the removed lines
+                    new_lines = []
+                    for i, line in enumerate(lines, 1):
+                        if i not in lines_to_remove:
+                            new_lines.append(line)
+                    # Clean up consecutive blank lines
+                    cleaned = []
+                    for line in new_lines:
+                        if line.strip() == "" and cleaned and cleaned[-1].strip() == "":
+                            continue
+                        cleaned.append(line)
+                    py_file.write_text("".join(cleaned))
+                    removed_count = len(lines_to_remove)
+                    await ws(f"    Cleaned {py_file.name} (removed {removed_count} line(s))")
+
+        # --- Git: commit the file changes ---
+        await ws("\nCommitting file changes...")
+        git = f"git -C {addons_dir}"
+        await run_cmd(f"{git} add -A", ws)
+        _, status_out = await run_cmd(f"{git} status --porcelain", ws)
+        if status_out.strip():
+            await run_cmd(
+                f'{git} commit -m "Studio Bridge: fix misplaced definitions (moved to studio_customization)"',
+                ws
+            )
+            await run_cmd(f"{git} push", ws)
+            await ws("Changes committed and pushed.")
+        else:
+            await ws("No file changes to commit.")
+
+        await ws(f"\nDone. Run Studio → Module to include these definitions in {module_name}.")
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+
+def _remove_from_init(init_path, module_name):
+    """Remove 'from . import module_name' from __init__.py."""
+    if not init_path.exists():
+        return
+    lines = init_path.read_text().splitlines(keepends=True)
+    new_lines = [l for l in lines if f"import {module_name}" not in l]
+    # If nothing meaningful remains, write empty file
+    if all(l.strip() == "" for l in new_lines):
+        init_path.write_text("")
+    else:
+        init_path.write_text("".join(new_lines))
+
+
 def get_custom_addons_info(config):
     result = {}
     for ver in ["19", "18"]:
