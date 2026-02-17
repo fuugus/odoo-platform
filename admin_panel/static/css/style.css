@@ -493,6 +493,7 @@ input:focus, select:focus {
 .badge-staging { background: #fff3db; color: #7a5e0e; }
 .badge-dev, [class*="badge-dev_"] { background: #e3ecfb; color: #2454a0; }
 .badge-system { background: var(--secondary); color: var(--text-muted); }
+.badge-danger { background: #fde2e2; color: #8b1a1a; }
 
 /* ─── Status Dots ────────────────────────────────────────────────────────── */
 

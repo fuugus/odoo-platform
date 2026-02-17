@@ -47,6 +47,8 @@
     </div>
 </div>
 
+<div id="misplaced-warning" style="display:none;margin-bottom:16px;"></div>
+
 <div id="addons-card" class="card" style="display:none;">
     <h3 id="addons-title">Deployed Addons</h3>
     <div id="addons-content"></div>
@@ -167,11 +169,19 @@ async function fetchStats(instanceName) {
             return;
         }
 
+        const mfCount = (data.misplaced_fields || []).length;
+        const mmCount = (data.misplaced_models || []).length;
+        const misplacedTotal = mfCount + mmCount;
+
         document.getElementById('stat-fields').textContent = data.fields.total;
-        document.getElementById('stat-fields-detail').textContent = splitLabel(data.fields);
+        let fieldsDetail = splitLabel(data.fields);
+        if (mfCount > 0) fieldsDetail += (fieldsDetail ? ' · ' : '') + '<span style="color:#b33">' + mfCount + ' misplaced</span>';
+        document.getElementById('stat-fields-detail').innerHTML = fieldsDetail;
 
         document.getElementById('stat-models').textContent = data.models.total;
-        document.getElementById('stat-models-detail').textContent = splitLabel(data.models);
+        let modelsDetail = splitLabel(data.models);
+        if (mmCount > 0) modelsDetail += (modelsDetail ? ' · ' : '') + '<span style="color:#b33">' + mmCount + ' misplaced</span>';
+        document.getElementById('stat-models-detail').innerHTML = modelsDetail;
 
         document.getElementById('stat-views').textContent = data.views.total;
         document.getElementById('stat-views-detail').textContent = splitLabel(data.views);
@@ -183,6 +193,23 @@ async function fetchStats(instanceName) {
             stateEl.innerHTML = '<span class="badge badge-staging">uninstalled</span>';
         } else {
             stateEl.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">no module</span>';
+        }
+
+        // Misplaced definitions banner
+        const warnEl = document.getElementById('misplaced-warning');
+        if (misplacedTotal > 0) {
+            let lines = [];
+            (data.misplaced_fields || []).forEach(f => {
+                lines.push('<code>' + f.name + '</code> on <code>' + f.model + '</code> — in <b>' + f.module + '</b>, should be in <b>' + data.module_name + '</b>');
+            });
+            (data.misplaced_models || []).forEach(m => {
+                lines.push('Model <code>' + m.model + '</code> — in <b>' + m.module + '</b>, should be in <b>' + data.module_name + '</b>');
+            });
+            warnEl.innerHTML = '<div style="background:#fff3db;border-left:3px solid #d4a20a;color:#5a4a0a;padding:10px 14px;font-size:13px;line-height:1.8;border-radius:3px;">'
+                + '<b>Misplaced definitions</b><br>' + lines.join('<br>') + '</div>';
+            warnEl.style.display = '';
+        } else {
+            warnEl.style.display = 'none';
         }
 
         renderAddons(data.instance_addons, data.addons || {});

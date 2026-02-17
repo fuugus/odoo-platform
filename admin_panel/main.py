@@ -738,6 +738,7 @@ async def api_studio_bridge_summary():
                 "has_customizations": stats["has_customizations"],
                 "module_state": stats["module_state"],
                 "fields": stats["fields"],
+                "misplaced": len(stats.get("misplaced_fields", [])) + len(stats.get("misplaced_models", [])),
             }
     return result
 

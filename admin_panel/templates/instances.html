@@ -405,6 +405,9 @@ StatusPoller.init(function(data, pending) {
                 html += '<span class="badge badge-staging">' + f.studio + ' studio</span> ';
                 html += '<span class="badge badge-prod">' + f.module + ' module</span>';
             }
+            if (info.misplaced > 0) {
+                html += ' <span class="badge badge-danger">' + info.misplaced + ' misplaced</span>';
+            }
             html += '</a>';
             cell.innerHTML = html;
         }
