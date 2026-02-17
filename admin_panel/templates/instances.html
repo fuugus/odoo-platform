@@ -331,7 +331,7 @@ async function resetSshKey(name, sshUser, version) {
 }
 
 async function syncToRepo(name) {
-    if (!confirm(`Force-sync addons from ${name} to the shared repo?\n\nThis OVERWRITES the repo with this instance's current state. Changes from other instances that are not on this instance will be lost.`)) return;
+    if (!confirm(`Force-push addons from ${name} to the shared repo? This replaces the repo contents entirely.`)) return;
     try {
         const resp = await fetch(`/api/instances/${name}/sync-to-repo`, {method: 'POST'});
         const data = await resp.json();
