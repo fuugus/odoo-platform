@@ -383,19 +383,23 @@ async def export_studio_to_module(db_name, client, version, ws_send=None, addons
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     try:
-        # 1. Custom models (state=manual means Studio-created)
+        # 1. Custom models (manual = Studio, or already owned by module)
         await ws("Querying custom models...")
         cur.execute("""
             SELECT id, model, name, info
             FROM ir_model
             WHERE state = 'manual'
+               OR (model LIKE 'x\\_%%' AND id IN (
+                   SELECT res_id FROM ir_model_data
+                   WHERE module = %s AND model = 'ir.model'
+               ))
             ORDER BY model
-        """)
+        """, (module_name,))
         custom_models = cur.fetchall()
         await ws(f"  Found {len(custom_models)} custom model(s)")
 
-        # 2. Manual fields (Studio-created fields on any model)
-        await ws("Querying Studio fields...")
+        # 2. Custom fields (manual = Studio, or already owned by module)
+        await ws("Querying custom fields...")
         cur.execute("""
             SELECT f.id, f.name, f.field_description, f.ttype, f.state,
                    f.required, f.index, f.translate, f.relation, f.relation_field,
@@ -403,12 +407,16 @@ async def export_studio_to_module(db_name, client, version, ws_send=None, addons
                    m.model, m.state as model_state
             FROM ir_model_fields f
             JOIN ir_model m ON f.model_id = m.id
-            WHERE f.state = 'manual'
-              AND (f.related IS NULL OR f.related = '')
+            WHERE (f.related IS NULL OR f.related = '')
+              AND (f.state = 'manual'
+                   OR (f.name LIKE 'x\\_%%' AND f.id IN (
+                       SELECT res_id FROM ir_model_data
+                       WHERE module = %s AND model = 'ir.model.fields'
+                   )))
             ORDER BY m.model, f.name
-        """)
+        """, (module_name,))
         all_fields = cur.fetchall()
-        await ws(f"  Found {len(all_fields)} Studio field(s)")
+        await ws(f"  Found {len(all_fields)} custom field(s)")
 
         # 3. Selection options
         await ws("Querying selection options...")
@@ -417,8 +425,12 @@ async def export_studio_to_module(db_name, client, version, ws_send=None, addons
             FROM ir_model_fields_selection s
             JOIN ir_model_fields f ON s.field_id = f.id
             WHERE f.state = 'manual'
+               OR (f.name LIKE 'x\\_%%' AND f.id IN (
+                   SELECT res_id FROM ir_model_data
+                   WHERE module = %s AND model = 'ir.model.fields'
+               ))
             ORDER BY f.model, f.name, s.sequence
-        """)
+        """, (module_name,))
         selections_raw = cur.fetchall()
         selections_map = {}
         for s in selections_raw:
@@ -437,13 +449,17 @@ async def export_studio_to_module(db_name, client, version, ws_send=None, addons
             JOIN ir_model m ON a.model_id = m.id
             LEFT JOIN ir_model_data d ON d.model = 'res.groups' AND d.res_id = a.group_id
             WHERE m.state = 'manual'
+               OR (m.model LIKE 'x\\_%%' AND m.id IN (
+                   SELECT res_id FROM ir_model_data
+                   WHERE module = %s AND model = 'ir.model'
+               ))
             ORDER BY m.model, a.group_id, a.perm_read, a.perm_write, a.perm_create, a.perm_unlink, a.name
-        """)
+        """, (module_name,))
         access_rules = cur.fetchall()
         await ws(f"  Found {len(access_rules)} access rule(s)")
 
-        # 5. Studio views
-        await ws("Querying Studio views...")
+        # 5. Studio views (studio_customization or already owned by module)
+        await ws("Querying custom views...")
         cur.execute("""
             SELECT v.id, v.name, v.model, v.type, v.arch_db, v.inherit_id,
                    v.priority, v.active,
@@ -451,10 +467,11 @@ async def export_studio_to_module(db_name, client, version, ws_send=None, addons
             FROM ir_ui_view v
             JOIN ir_model_data d ON d.model = 'ir.ui.view' AND d.res_id = v.id
             WHERE d.module = 'studio_customization'
+               OR d.module = %s
             ORDER BY v.model, v.name
-        """)
+        """, (module_name,))
         studio_views = cur.fetchall()
-        await ws(f"  Found {len(studio_views)} Studio view(s)")
+        await ws(f"  Found {len(studio_views)} custom view(s)")
 
         # Group fields by model
         fields_by_model = {}
@@ -467,12 +484,24 @@ async def export_studio_to_module(db_name, client, version, ws_send=None, addons
             if model not in custom_model_names
         }
 
-        # Determine dependencies
+        # Determine dependencies (from inherited models)
         depends = set()
         for model in inherited_models:
             dep = STANDARD_MODEL_MODULES.get(model)
             if dep:
                 depends.add(dep)
+
+        # Also collect dependencies from view parent modules
+        for view in studio_views:
+            if view.get("inherit_id"):
+                cur.execute("""
+                    SELECT module FROM ir_model_data
+                    WHERE model = 'ir.ui.view' AND res_id = %s LIMIT 1
+                """, (view["inherit_id"],))
+                row = cur.fetchone()
+                if row and row["module"] not in ("studio_customization", module_name):
+                    depends.add(row["module"])
+
         depends.discard("base")
         depends = sorted(depends)
         if not depends:
@@ -608,7 +637,7 @@ async def export_studio_to_module(db_name, client, version, ws_send=None, addons
                     if parent_row:
                         parent_xmlid = list(parent_row.values())[0]
                         # If parent is in our own module, use local ref
-                        if parent_xmlid.startswith("studio_customization."):
+                        if parent_xmlid.startswith("studio_customization.") or parent_xmlid.startswith(f"{module_name}."):
                             local_name = parent_xmlid.split(".", 1)[1]
                             if any(v["xmlid_name"] == local_name for v in studio_views):
                                 parent_ref = local_name
@@ -958,8 +987,15 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     cur.execute("SELECT state FROM ir_module_module WHERE name = %s", (module_name,))
     mod_row = cur.fetchone()
     if not mod_row or mod_row[0] != "installed":
+        # Clean asset cache to prevent broken white page on next load
+        cur.execute("DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%%' OR url LIKE '/web/bundle/%%'")
+        cleaned_assets = cur.rowcount
+        conn.commit()
         cur.close()
         conn.close()
+        await ws(f"Cleared {cleaned_assets} cached asset bundle(s)")
+        await ws(f"Starting {service}...")
+        await run_cmd(f"systemctl start {service}", ws)
         if not odoo_ok:
             raise RuntimeError(f"odoo-bin failed and module {module_name} is not installed")
         raise RuntimeError(f"Module {module_name} state is {mod_row[0] if mod_row else 'not found'}")
