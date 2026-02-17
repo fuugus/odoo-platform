@@ -83,9 +83,14 @@
                     {% if inst.ssh_user %}
                     <button class="btn btn-sm btn-secondary" onclick="showSshSetup('{{ name }}', '{{ inst.ssh_user }}', '{{ inst.version | default('19') }}')" title="SSH Access"><span class="icon icon-key{% if inst.ssh_key_set %} ssh-active{% endif %}"></span></button>
                     <button class="btn btn-sm btn-secondary" onclick="syncToRepo('{{ name }}')" title="Sync to Repo"><span class="icon icon-upload"></span></button>
+                    {% else %}
+                    <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
+                    <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     {% endif %}
                     {% if inst.env != 'prod' %}
                     <button class="btn btn-sm btn-secondary" onclick="syncInstance('{{ name }}')" title="Sync from Prod"><span class="icon icon-clone"></span></button>
+                    {% else %}
+                    <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     {% endif %}
                     <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')" title="Restart"><span class="icon icon-refresh"></span></button>
                     <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')" title="Stop"><span class="icon icon-stop"></span></button>
