@@ -405,6 +405,11 @@ StatusPoller.init(function(data, pending) {
                 html += '<span class="badge badge-staging">' + f.studio + ' studio</span> ';
                 html += '<span class="badge badge-prod">' + f.module + ' module</span>';
             }
+            const mf = (info.misplaced_fields || []).length;
+            const mm = (info.misplaced_models || []).length;
+            if (mf + mm > 0) {
+                html += ' <span class="badge badge-dev" title="' + (mf + mm) + ' definition(s) in wrong module">\u26a0 ' + (mf + mm) + '</span>';
+            }
             html += '</a>';
             cell.innerHTML = html;
         }

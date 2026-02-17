@@ -26,7 +26,7 @@ All instances share the same repo. After pushing, other instances get changes vi
 
 **`{client}_base`** — All custom field and model definitions live here. Studio Bridge converts between Odoo Studio (DB definitions) and this module in both directions, so keeping all definitions in one place ensures clean round-trips. Developers can freely edit this module.
 
-**Other modules** (e.g. `{client}_website`, `{client}_hr`, ...) — Custom logic, controllers, templates, reports, etc. These modules must never define custom fields or models — only reference the ones from `{client}_base` via `depends`.
+**Other modules** (e.g. `{client}_website`, `{client}_hr`, ...) — Custom logic, controllers, templates, reports, etc. These must never define custom fields or models (`x_` / `x_studio_` fields, `x_` models) — all definitions belong exclusively in `{client}_base`. Other modules reference them via `depends` in `__manifest__.py`.
 
 ## Odoo Module Structure
 
