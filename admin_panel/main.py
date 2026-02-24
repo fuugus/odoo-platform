@@ -25,7 +25,7 @@ from setup_steps import (
     SETUP_STEPS, STEP_ORDER, STEP_DEPS, VERSION_STEPS,
     is_step_unlocked, get_installed_versions, odoo_base_dir,
     create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd,
-    _generate_password,
+    _generate_password, fix_addons_ownership,
 )
 from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser
 from studio_bridge import (
@@ -689,11 +689,7 @@ async def api_deploy(request: Request):
             capture_output=True, text=True, timeout=30,
         )
         git_output = result.stdout.strip() or result.stderr.strip()
-        owner = instance.get("ssh_user", "odoo")
-        subprocess.run(
-            ["chown", "-R", f"{owner}:odoo", instance_addons],
-            capture_output=True, timeout=10,
-        )
+        await fix_addons_ownership(instance_name, config)
     else:
         git_output = "(no git repo in addons directory)"
 
@@ -871,6 +867,7 @@ async def ws_studio_bridge_export(websocket: WebSocket):
         await websocket.send_json({"type": "status", "status": "running"})
         instance_addons = f"{odoo_base_dir(version)}/data/{instance_name}/addons"
         await export_studio_to_module(db_name, client, version, ws_send, addons_dir=instance_addons)
+        await fix_addons_ownership(instance_name, config, ws_send)
         await ws_send(f"\n{'=' * 50}")
         await ws_send(f"Installing {module_name} on {instance_name}...")
         await ws_send(f"{'=' * 50}\n")
@@ -954,6 +951,7 @@ async def ws_studio_bridge_revert(websocket: WebSocket):
         await run_cmd(f"systemctl stop {service}", ws_send)
 
         await convert_module_to_studio(db_name, client, ws_send)
+        await fix_addons_ownership(instance_name, config, ws_send)
 
         await ws_send(f"\nStarting {service}...")
         await run_cmd(f"systemctl start {service}", ws_send)

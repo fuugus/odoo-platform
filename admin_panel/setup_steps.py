@@ -136,6 +136,31 @@ def odoo_base_dir(version: str) -> str:
     return f"/opt/odoo{version}"
 
 
+def get_instance_owner(instance: dict) -> str:
+    """Return the filesystem owner for an instance's addons directory.
+
+    Dev instances have an ssh_user (e.g. dev-adrian), others use 'odoo'.
+    """
+    return instance.get("ssh_user", "odoo")
+
+
+async def fix_addons_ownership(instance_name: str, config: dict = None, ws_send=None):
+    """Set correct ownership on an instance's addons directory.
+
+    Resolves the right owner (ssh_user for dev instances, odoo otherwise)
+    and recursively chowns the addons directory.
+    """
+    if config is None:
+        config = load_config()
+    instance = config.get("instances", {}).get(instance_name)
+    if not instance:
+        return
+    version = instance.get("version", "19")
+    owner = get_instance_owner(instance)
+    addons_dir = f"{odoo_base_dir(version)}/data/{instance_name}/addons"
+    await run_cmd(f"chown -R {owner}:odoo {addons_dir}", ws_send)
+
+
 async def step_odoo_version(version: str, ws_send=None):
     """Clone Odoo Community + Enterprise for a specific version and install Python dependencies."""
     step_id = f"odoo_{version}"
@@ -901,8 +926,7 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
             await ws_send("Pulling latest addons from git repo...")
         await run_cmd(f"git -C {target_addons} fetch origin", ws_send)
         await run_cmd(f"git -C {target_addons} reset --hard origin/main", ws_send)
-        owner = target.get("ssh_user", "odoo")
-        await run_cmd(f"chown -R {owner}:odoo {target_addons}", ws_send)
+        await fix_addons_ownership(instance_name, ws_send=ws_send)
 
     # Neutralize the cloned database
     if ws_send:
