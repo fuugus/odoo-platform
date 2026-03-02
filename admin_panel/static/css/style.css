@@ -650,6 +650,43 @@ input:focus, select:focus {
     resize: vertical;
 }
 .ssh-key-form button { margin-top: 6px; }
+.ssh-key-list { margin: 4px 0 8px; }
+.ssh-key-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+}
+.ssh-key-entry:last-child { border-bottom: none; }
+.ssh-key-info {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+.ssh-key-comment {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+}
+.ssh-key-fingerprint {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ssh-key-type {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.ssh-key-remove { flex-shrink: 0; margin-left: 8px; }
 #ssh-setup-row td { padding: 0; }
 
 #sync-log-row td {

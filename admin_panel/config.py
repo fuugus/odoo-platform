@@ -82,6 +82,12 @@ def migrate_config(config: dict) -> dict:
         config["auth"] = DEFAULT_CONFIG["auth"].copy()
         changed = True
 
+    # Migrate ssh_key_set (boolean) -> ssh_key_count (integer)
+    for name, inst in config.get("instances", {}).items():
+        if "ssh_key_set" in inst:
+            inst["ssh_key_count"] = 1 if inst.pop("ssh_key_set") else 0
+            changed = True
+
     # Auto-generate session_secret if empty
     auth = config.get("auth", {})
     if not auth.get("session_secret"):

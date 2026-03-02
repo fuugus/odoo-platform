@@ -3,6 +3,8 @@ Odoo Deployment Platform - FastAPI Admin Panel
 Main application with setup wizard, instance management, and deployment.
 """
 import asyncio
+import base64
+import hashlib
 import json
 import os
 import re
@@ -525,9 +527,72 @@ async def api_reset_admin_pw(instance_name: str):
     return {"status": "ok", "admin_pw": new_pw}
 
 
-@app.post("/api/instances/{instance_name}/ssh-key")
-async def api_set_ssh_key(instance_name: str, request: Request):
-    """Set SSH public key for a dev instance."""
+SSH_KEY_PREFIXES = (
+    "ssh-rsa", "ssh-ed25519", "ssh-dss",
+    "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521",
+    "sk-ssh-ed25519@openssh.com", "sk-ecdsa-sha2-nistp256@openssh.com",
+)
+
+SSH_TYPE_NAMES = {
+    "ssh-rsa": "RSA", "ssh-ed25519": "ED25519", "ssh-dss": "DSA",
+    "ecdsa-sha2-nistp256": "ECDSA", "ecdsa-sha2-nistp384": "ECDSA",
+    "ecdsa-sha2-nistp521": "ECDSA",
+    "sk-ssh-ed25519@openssh.com": "ED25519-SK",
+    "sk-ecdsa-sha2-nistp256@openssh.com": "ECDSA-SK",
+}
+
+
+def _parse_ssh_key(line: str) -> dict | None:
+    """Parse an SSH public key line into {type, fingerprint, comment, line}."""
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+    key_type = parts[0]
+    if not any(key_type == p for p in SSH_KEY_PREFIXES):
+        return None
+    try:
+        key_data = base64.b64decode(parts[1])
+    except Exception:
+        return None
+    digest = hashlib.sha256(key_data).digest()
+    fp = "SHA256:" + base64.b64encode(digest).rstrip(b"=").decode()
+    comment = " ".join(parts[2:]) if len(parts) > 2 else ""
+    friendly = SSH_TYPE_NAMES.get(key_type, key_type.upper())
+    return {"type": friendly, "fingerprint": fp, "comment": comment, "line": line}
+
+
+def _read_authorized_keys(path: str) -> list[dict]:
+    """Read and parse all SSH keys from an authorized_keys file."""
+    keys = []
+    try:
+        with open(path) as f:
+            for raw in f:
+                parsed = _parse_ssh_key(raw)
+                if parsed:
+                    keys.append(parsed)
+    except FileNotFoundError:
+        pass
+    return keys
+
+
+def _write_authorized_keys(path: str, keys: list[dict], ssh_user: str):
+    """Write keys back to authorized_keys and fix ownership."""
+    with open(path, "w") as f:
+        for k in keys:
+            f.write(k["line"] + "\n")
+    shutil.chown(path, user=ssh_user, group=ssh_user)
+
+
+def _keys_response(keys: list[dict]) -> list[dict]:
+    """Strip internal 'line' field for API responses."""
+    return [{"type": k["type"], "fingerprint": k["fingerprint"], "comment": k["comment"]} for k in keys]
+
+
+def _get_ssh_context(instance_name: str):
+    """Shared validation for SSH key endpoints. Returns (instance, ssh_user, auth_keys_path, config)."""
     config = load_config()
     instance = config["instances"].get(instance_name)
     if not instance:
@@ -535,50 +600,61 @@ async def api_set_ssh_key(instance_name: str, request: Request):
     ssh_user = instance.get("ssh_user")
     if not ssh_user:
         raise HTTPException(status_code=400, detail="Not a dev instance")
+    version = instance.get("version", "19")
+    data_dir = f"{odoo_base_dir(version)}/data/{instance_name}"
+    auth_keys = f"{data_dir}/.ssh/authorized_keys"
+    return instance, ssh_user, auth_keys, config
+
+
+@app.get("/api/instances/{instance_name}/ssh-keys")
+async def api_list_ssh_keys(instance_name: str):
+    """List all SSH public keys for a dev instance."""
+    instance, ssh_user, auth_keys, config = _get_ssh_context(instance_name)
+    keys = _read_authorized_keys(auth_keys)
+    return {"keys": _keys_response(keys)}
+
+
+@app.post("/api/instances/{instance_name}/ssh-keys")
+async def api_add_ssh_key(instance_name: str, request: Request):
+    """Add an SSH public key to a dev instance."""
+    instance, ssh_user, auth_keys, config = _get_ssh_context(instance_name)
 
     data = await request.json()
     public_key = data.get("public_key", "").strip()
-    if not public_key or not public_key.startswith("ssh-"):
+    parsed = _parse_ssh_key(public_key)
+    if not parsed:
         raise HTTPException(status_code=400, detail="Invalid SSH public key")
 
-    version = instance.get("version", "19")
-    data_dir = f"{odoo_base_dir(version)}/data/{instance_name}"
-    auth_keys = f"{data_dir}/.ssh/authorized_keys"
+    existing = _read_authorized_keys(auth_keys)
+    for k in existing:
+        if k["fingerprint"] == parsed["fingerprint"]:
+            raise HTTPException(status_code=409, detail="This key is already authorized")
 
-    with open(auth_keys, "w") as f:
-        f.write(public_key + "\n")
+    existing.append(parsed)
+    _write_authorized_keys(auth_keys, existing, ssh_user)
 
-    shutil.chown(auth_keys, user=ssh_user, group=ssh_user)
-    shutil.chown(f"{data_dir}/.ssh", user=ssh_user, group=ssh_user)
-
-    instance["ssh_key_set"] = True
+    instance["ssh_key_count"] = len(existing)
     save_config(config)
-    return {"status": "ok"}
+    return {"status": "ok", "keys": _keys_response(existing)}
 
 
-@app.delete("/api/instances/{instance_name}/ssh-key")
-async def api_reset_ssh_key(instance_name: str):
-    """Reset SSH public key for a dev instance."""
-    config = load_config()
-    instance = config["instances"].get(instance_name)
-    if not instance:
-        raise HTTPException(status_code=404, detail="Instance not found")
-    ssh_user = instance.get("ssh_user")
-    if not ssh_user:
-        raise HTTPException(status_code=400, detail="Not a dev instance")
+@app.delete("/api/instances/{instance_name}/ssh-keys/{fingerprint}")
+async def api_remove_ssh_key(instance_name: str, fingerprint: str):
+    """Remove an SSH public key by fingerprint hash."""
+    instance, ssh_user, auth_keys, config = _get_ssh_context(instance_name)
 
-    version = instance.get("version", "19")
-    data_dir = f"{odoo_base_dir(version)}/data/{instance_name}"
-    auth_keys = f"{data_dir}/.ssh/authorized_keys"
+    full_fp = f"SHA256:{fingerprint}"
+    existing = _read_authorized_keys(auth_keys)
+    remaining = [k for k in existing if k["fingerprint"] != full_fp]
 
-    with open(auth_keys, "w") as f:
-        f.write("")
+    if len(remaining) == len(existing):
+        raise HTTPException(status_code=404, detail="Key not found")
 
-    shutil.chown(auth_keys, user=ssh_user, group=ssh_user)
+    _write_authorized_keys(auth_keys, remaining, ssh_user)
 
-    instance["ssh_key_set"] = False
+    instance["ssh_key_count"] = len(remaining)
     save_config(config)
-    return {"status": "ok"}
+    return {"status": "ok", "keys": _keys_response(remaining)}
 
 
 @app.post("/api/instances/{instance_name}/sync-to-repo")
