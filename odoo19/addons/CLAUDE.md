@@ -2,15 +2,23 @@
 
 You are working inside an Odoo 19 instance's custom addons directory. This directory is a git working tree shared across all instances via a local bare repo at `/opt/git/odoo19-addons.git`.
 
+## Platform Overview
+
+This server runs a self-hosted Odoo deployment platform managed via an admin panel at `admin.odoo.binaryone.ch`. It hosts multiple isolated Odoo instances (prod, staging, dev) for different clients.
+
+- **Platform codebase:** `/root/odoo-platform/` — FastAPI admin panel, setup automation, Studio Bridge (read-only for dev users, but useful as documentation)
+- **Odoo community source:** `/opt/odoo19/odoo/` (branch 19.0)
+- **Odoo enterprise source:** `/opt/odoo19/enterprise/` (branch 19.0)
+- **Python venv (Odoo):** `/opt/odoo19/venv/`
+- **Instance data dirs:** `/opt/odoo19/data/<instance_name>/`
+- **Shared addons repo:** `/opt/git/odoo19-addons.git` (bare, all instances clone from here)
+
 ## Where You Are
 
-- **This directory:** Custom addons for one Odoo 19 instance (git repo)
-- **Shared repo:** `/opt/git/odoo19-addons.git` (bare, all instances share this)
-- **Odoo source:** `/opt/odoo19/odoo/` (community), `/opt/odoo19/enterprise/` (enterprise)
+- **This directory:** Custom addons for one Odoo 19 instance (cloned from shared repo)
 - **Instance config:** `/etc/odoo/<instance_name>.conf`
-- **Instance data:** `/opt/odoo19/data/<instance_name>/`
 - **Logs:** `/var/log/odoo/<instance_name>.log`
-- **Instance name** = directory name under `data/` (e.g. `client_dev_name`)
+- **Instance name** = directory name under `data/` (e.g. `kaminfeger_dev_samuel`)
 
 ## Git Workflow
 
