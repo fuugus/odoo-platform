@@ -8,13 +8,16 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
+import tempfile as _tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -28,6 +31,7 @@ from setup_steps import (
     is_step_unlocked, get_installed_versions, odoo_base_dir,
     create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd,
     _generate_password, fix_addons_ownership,
+    backup_instance, restore_instance,
 )
 from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser
 from neutralize import is_neutralized, neutralize_db, deneutralize_db
@@ -731,6 +735,59 @@ async def api_toggle_neutralize(instance_name: str, request: Request):
     return {"status": "ok", "neutralized": neutralized, "stats": stats}
 
 
+@app.get("/api/instances/{instance_name}/backup")
+async def api_backup_instance(instance_name: str):
+    """Download a full backup zip of the instance (Odoo DB manager compatible)."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    try:
+        zip_path = await backup_instance(instance_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {e}")
+
+    filename = Path(zip_path).name
+    tmp_dir = str(Path(zip_path).parent)
+
+    def cleanup():
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return FileResponse(
+        path=zip_path,
+        media_type="application/zip",
+        filename=filename,
+        background=BackgroundTask(cleanup),
+    )
+
+
+_pending_uploads: dict[str, str] = {}
+
+
+@app.post("/api/instances/{instance_name}/upload-backup")
+async def api_upload_backup(instance_name: str, file: UploadFile = File(...)):
+    """Upload a backup zip file for later restore via WebSocket."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    tmp = _tempfile.NamedTemporaryFile(delete=False, suffix=".zip", prefix="odoo_upload_")
+    try:
+        while chunk := await file.read(1024 * 1024):
+            tmp.write(chunk)
+        tmp.close()
+    except Exception:
+        tmp.close()
+        os.unlink(tmp.name)
+        raise
+
+    upload_id = secrets.token_hex(8)
+    _pending_uploads[upload_id] = tmp.name
+    return {"upload_id": upload_id}
+
+
 @app.get("/api/databases")
 async def api_list_databases():
     """List all PostgreSQL databases."""
@@ -948,6 +1005,38 @@ async def ws_sync_instance(websocket: WebSocket, instance_name: str):
 
         await websocket.send_json({"type": "status", "status": "running"})
         await sync_instance_from_prod(instance_name, ws_send)
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
+    finally:
+        await websocket.close()
+
+
+@app.websocket("/ws/instance/restore/{instance_name}")
+async def ws_restore_instance(websocket: WebSocket, instance_name: str):
+    """WebSocket endpoint for restoring an instance from a backup with live output."""
+    await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
+    try:
+        data = await websocket.receive_json()
+        upload_id = data.get("upload_id")
+        if not upload_id or upload_id not in _pending_uploads:
+            raise ValueError("Invalid or expired upload ID")
+
+        zip_path = _pending_uploads.pop(upload_id)
+
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await restore_instance(instance_name, zip_path, ws_send)
         await websocket.send_json({"type": "status", "status": "done"})
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})

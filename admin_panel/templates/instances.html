@@ -91,6 +91,8 @@
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     {% endif %}
+                    <a class="btn btn-sm btn-secondary" href="/api/instances/{{ name }}/backup" title="Download Backup"><span class="icon icon-download"></span></a>
+                    <button class="btn btn-sm btn-secondary" onclick="restoreInstance('{{ name }}')" title="Restore Backup"><span class="icon icon-download icon-flip"></span></button>
                     {% if inst.env != 'prod' %}
                     <button class="btn btn-sm btn-secondary" onclick="syncInstance('{{ name }}')" title="Sync from Prod"><span class="icon icon-clone"></span></button>
                     {% else %}
@@ -201,6 +203,74 @@ function syncInstance(name) {
             showToast('Sync failed', 'error');
         }
     });
+}
+
+function restoreInstance(name) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        if (!confirm(`This will REPLACE the entire database and filestore of ${name} with "${file.name}". Continue?`)) return;
+
+        const row = document.getElementById('row-' + name);
+        if (!row) return;
+
+        const old = document.getElementById('restore-log-row');
+        if (old) old.remove();
+
+        const cols = row.querySelectorAll('td').length;
+        const logRow = document.createElement('tr');
+        logRow.id = 'restore-log-row';
+        const td = document.createElement('td');
+        td.colSpan = cols;
+        td.innerHTML = '<div class="sync-log-inline"><pre>Uploading backup...</pre></div>';
+        logRow.appendChild(td);
+        row.after(logRow);
+
+        const logDiv = td.querySelector('.sync-log-inline');
+        const pre = logDiv.querySelector('pre');
+
+        try {
+            const form = new FormData();
+            form.append('file', file);
+            const uploadResp = await fetch(`/api/instances/${name}/upload-backup`, {method: 'POST', body: form});
+            if (!uploadResp.ok) {
+                const err = await uploadResp.json().catch(() => ({}));
+                pre.textContent += `\nUpload failed: ${err.detail || 'Unknown error'}\n`;
+                showToast('Upload failed', 'error');
+                return;
+            }
+            const {upload_id} = await uploadResp.json();
+            pre.textContent += ' done.\n';
+
+            let hadError = false;
+            connectWebSocket(`/ws/instance/restore/${name}`, logDiv, {
+                onOpen(ws) {
+                    ws.send(JSON.stringify({upload_id}));
+                },
+                onStatus(status) {
+                    if (status === 'done') {
+                        pre.textContent += '\nRestore complete!\n';
+                        showToast('Instance restored');
+                        if (!hadError) {
+                            setTimeout(() => logRow.remove(), 3000);
+                            setTimeout(() => location.reload(), 3500);
+                        }
+                    }
+                },
+                onError(msg) {
+                    hadError = true;
+                    showToast('Restore failed', 'error');
+                }
+            });
+        } catch (e) {
+            pre.textContent += `\nError: ${e.message}\n`;
+            showToast('Restore failed', 'error');
+        }
+    };
+    input.click();
 }
 
 async function restartInstance(name) {

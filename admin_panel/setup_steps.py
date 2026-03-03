@@ -3,11 +3,16 @@ Setup step implementations - each step is an async function that runs
 shell commands and reports progress via WebSocket.
 """
 import asyncio
+import json as _json
 import os
 import re
 import secrets
+import shutil
 import string
 import subprocess
+import tempfile
+import zipfile
+from datetime import datetime
 from pathlib import Path
 from config import load_config, save_config, update_step_status, PLATFORM_DIR
 
@@ -277,6 +282,8 @@ server {
     listen 80;
     server_name ~^admin\\.;
 
+    client_max_body_size 2g;
+
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
@@ -286,6 +293,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_read_timeout 600s;
     }
 }
 
@@ -969,6 +977,176 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
 
     if ws_send:
         await ws_send(f"Sync complete: {instance_name} now mirrors {prod_name}")
+
+
+# ─── Backup & Restore ─────────────────────────────────────────────────────
+
+async def backup_instance(instance_name: str, ws_send=None) -> str:
+    """Create an Odoo-compatible backup zip (dump.sql + filestore + manifest.json).
+
+    Returns the path to the temporary zip file.
+    """
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise ValueError(f"Instance {instance_name} not found")
+
+    version = instance.get("version", "19")
+    base = odoo_base_dir(version)
+    db_name = instance["db_name"]
+    data_dir = f"{base}/data/{instance_name}"
+    filestore_dir = f"{data_dir}/filestore/{db_name}"
+
+    tmp_dir = tempfile.mkdtemp(prefix="odoo_backup_")
+    try:
+        if ws_send:
+            await ws_send(f"Dumping database {db_name}...")
+        dump_path = f"{tmp_dir}/dump.sql"
+        await run_cmd(f"pg_dump -U odoo --no-owner --file={dump_path} {db_name}", ws_send)
+
+        if ws_send:
+            await ws_send("Generating manifest...")
+        proc = await asyncio.create_subprocess_shell(
+            f"psql -U odoo -d {db_name} -t -A -c "
+            "\"SELECT name FROM ir_module_module WHERE state = 'installed' ORDER BY name\"",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        modules = [m.strip() for m in stdout.decode().strip().split("\n") if m.strip()]
+
+        proc2 = await asyncio.create_subprocess_shell(
+            f"psql -U odoo -d {db_name} -t -A -c "
+            "\"SELECT latest_version FROM ir_module_module WHERE name = 'base'\"",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout2, _ = await proc2.communicate()
+        odoo_version = stdout2.decode().strip() or f"{version}.0"
+
+        manifest = {
+            "odoo_dump": "1",
+            "db_name": db_name,
+            "version": odoo_version,
+            "version_info": [int(version), 0, 0, "final", 0],
+            "major_version": f"{version}.0",
+            "pg_version": "16.0",
+            "modules": {m: True for m in modules},
+        }
+        manifest_path = f"{tmp_dir}/manifest.json"
+        with open(manifest_path, "w") as f:
+            _json.dump(manifest, f, indent=2)
+
+        if ws_send:
+            await ws_send("Creating zip archive...")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        zip_path = f"{tmp_dir}/{db_name}_{timestamp}.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(dump_path, "dump.sql")
+            zf.write(manifest_path, "manifest.json")
+            if Path(filestore_dir).exists():
+                for root, dirs, files in os.walk(filestore_dir):
+                    for fname in files:
+                        full = os.path.join(root, fname)
+                        arcname = "filestore/" + os.path.relpath(full, filestore_dir)
+                        zf.write(full, arcname)
+
+        os.unlink(dump_path)
+        os.unlink(manifest_path)
+
+        zip_size = Path(zip_path).stat().st_size
+        if ws_send:
+            await ws_send(f"Backup complete: {zip_size / 1024 / 1024:.1f} MB")
+        return zip_path
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
+async def restore_instance(instance_name: str, zip_path: str, ws_send=None):
+    """Restore an Odoo instance from a backup zip (Odoo database manager format).
+
+    Stops instance, drops DB, restores dump.sql + filestore, resets admin pw, starts instance.
+    """
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise ValueError(f"Instance {instance_name} not found")
+
+    version = instance.get("version", "19")
+    base = odoo_base_dir(version)
+    db_name = instance["db_name"]
+    service = instance["service"]
+    data_dir = f"{base}/data/{instance_name}"
+    filestore_dir = f"{data_dir}/filestore/{db_name}"
+
+    tmp_dir = tempfile.mkdtemp(prefix="odoo_restore_")
+    try:
+        if ws_send:
+            await ws_send("Validating backup archive...")
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            if "dump.sql" not in names:
+                raise ValueError("Invalid backup: dump.sql not found in archive")
+            zf.extractall(tmp_dir)
+
+        if ws_send:
+            await ws_send(f"Stopping {service}...")
+        await run_cmd(f"systemctl stop {service}", ws_send)
+
+        if ws_send:
+            await ws_send(f"Terminating connections to {db_name}...")
+        await run_cmd(
+            f"su - postgres -c \"psql -c \\\"SELECT pg_terminate_backend(pid) "
+            f"FROM pg_stat_activity WHERE datname='{db_name}' "
+            f"AND pid <> pg_backend_pid()\\\"\"",
+            ws_send,
+        )
+
+        if ws_send:
+            await ws_send(f"Dropping database {db_name}...")
+        await run_cmd(f'su - postgres -c "dropdb --if-exists {db_name}"', ws_send)
+
+        if ws_send:
+            await ws_send(f"Creating empty database {db_name}...")
+        await run_cmd(f'su - postgres -c "createdb -O odoo {db_name}"', ws_send)
+
+        if ws_send:
+            await ws_send("Restoring database from dump...")
+        await run_cmd(f"psql -U odoo --dbname={db_name} -q -o /dev/null -f {tmp_dir}/dump.sql", ws_send)
+
+        extracted_filestore = f"{tmp_dir}/filestore"
+        if Path(extracted_filestore).exists():
+            if ws_send:
+                await ws_send("Restoring filestore...")
+            if Path(filestore_dir).exists():
+                shutil.rmtree(filestore_dir)
+            os.makedirs(os.path.dirname(filestore_dir), exist_ok=True)
+            shutil.copytree(extracted_filestore, filestore_dir)
+            await run_cmd(f"chown -R odoo:odoo {filestore_dir}", ws_send)
+        else:
+            if ws_send:
+                await ws_send("No filestore in backup archive")
+
+        if ws_send:
+            await ws_send("Resetting admin password...")
+        from admin_pw import reset_admin_pw
+        new_pw = _generate_password()
+        reset_admin_pw(db_name, new_pw)
+        config = load_config()
+        config["instances"][instance_name]["admin_pw"] = new_pw
+        save_config(config)
+
+        if ws_send:
+            await ws_send(f"Starting {service}...")
+        await run_cmd(f"systemctl start {service}", ws_send)
+
+        if ws_send:
+            await ws_send(f"Restore complete. New admin password: {new_pw}")
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        if Path(zip_path).exists():
+            os.unlink(zip_path)
 
 
 # ─── Step Dependency System ────────────────────────────────────────────────
