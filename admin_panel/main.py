@@ -765,6 +765,13 @@ async def api_deploy(request: Request):
             capture_output=True, text=True, timeout=30,
         )
         git_output = result.stdout.strip() or result.stderr.strip()
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "git_output": git_output,
+                "instance": instance_name,
+                "message": "Git pull failed — instance was NOT restarted.",
+            }
         await fix_addons_ownership(instance_name, config)
     else:
         git_output = "(no git repo in addons directory)"

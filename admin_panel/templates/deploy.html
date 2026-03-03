@@ -71,12 +71,13 @@ async function deploy() {
         });
         const data = await resp.json();
 
-        if (resp.ok) {
+        if (resp.ok && data.status === 'ok') {
             logPre.textContent += `\nGit Output:\n${data.git_output || '(no output)'}\n`;
             logPre.textContent += `\nDeploy successful! Instance ${data.instance} restarted.\n`;
             showToast('Deploy successful');
         } else {
-            logPre.textContent += `\nError: ${data.detail}\n`;
+            logPre.textContent += `\nGit Output:\n${data.git_output || '(no output)'}\n`;
+            logPre.textContent += `\n${data.message || data.detail || 'Deploy failed'}\n`;
             showToast('Deploy failed', 'error');
         }
     } catch(e) {
