@@ -18,11 +18,18 @@
     </div>
     <div class="stat-card card">
         <div class="stat-value" id="cpu-usage">–</div>
-        <div class="stat-label">CPU %</div>
+        <div class="stat-label">CPU</div>
+        <div class="stat-detail" id="cpu-detail">&nbsp;</div>
     </div>
     <div class="stat-card card">
-        <div class="stat-value" id="mem-usage">–</div>
-        <div class="stat-label">RAM %</div>
+        <div class="stat-value" id="ram-usage">–</div>
+        <div class="stat-label">RAM</div>
+        <div class="stat-detail" id="ram-detail">&nbsp;</div>
+    </div>
+    <div class="stat-card card">
+        <div class="stat-value" id="disk-usage">–</div>
+        <div class="stat-label">Disk</div>
+        <div class="stat-detail" id="disk-detail">&nbsp;</div>
     </div>
 </div>
 
@@ -64,9 +71,18 @@
 <script>
 async function updateStats() {
     try {
-        const resp = await fetch('/api/health');
+        const resp = await fetch('/api/system-stats');
+        if (!resp.ok) return;
+        const s = await resp.json();
+        document.getElementById('cpu-usage').textContent = s.cpu.percent + '%';
+        document.getElementById('cpu-detail').textContent = s.cpu.cores + ' cores';
+        document.getElementById('ram-usage').textContent = s.ram.percent + '%';
+        document.getElementById('ram-detail').textContent = s.ram.used_gb + ' / ' + s.ram.total_gb + ' GB';
+        document.getElementById('disk-usage').textContent = s.disk.percent + '%';
+        document.getElementById('disk-detail').textContent = s.disk.used_gb + ' / ' + s.disk.total_gb + ' GB';
     } catch(e) {}
 }
 updateStats();
+setInterval(updateStats, 10000);
 </script>
 {% endblock %}

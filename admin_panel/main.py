@@ -1185,6 +1185,28 @@ async def api_server_info():
     }
 
 
+@app.get("/api/system-stats")
+async def api_system_stats():
+    """CPU, RAM, and disk usage stats."""
+    import psutil
+    cpu = psutil.cpu_percent(interval=0.5)
+    mem = psutil.virtual_memory()
+    disk = psutil.disk_usage("/")
+    return {
+        "cpu": {"percent": cpu, "cores": psutil.cpu_count()},
+        "ram": {
+            "percent": mem.percent,
+            "used_gb": round(mem.used / 1073741824, 1),
+            "total_gb": round(mem.total / 1073741824, 1),
+        },
+        "disk": {
+            "percent": disk.percent,
+            "used_gb": round(disk.used / 1073741824, 1),
+            "total_gb": round(disk.total / 1073741824, 1),
+        },
+    }
+
+
 @app.get("/api/health")
 async def health():
     """Health check endpoint."""
