@@ -713,6 +713,13 @@ WantedBy=multi-user.target
         ws_send,
     )
 
+    # Neutralize dev/staging instances
+    if env != "prod":
+        if ws_send:
+            await ws_send("Neutralizing database...")
+        from neutralize import neutralize_db
+        neutralize_db(db_name)
+
     # Enable and start
     await run_cmd("systemctl daemon-reload", ws_send)
     await run_cmd(f"systemctl enable odoo-{instance_name}", ws_send)
@@ -930,12 +937,12 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
 
     # Neutralize the cloned database
     if ws_send:
-        await ws_send("Running Odoo neutralize...")
-    await run_cmd(
-        f"su - odoo -s /bin/bash -c \"{base}/venv/bin/python3 {base}/odoo/odoo-bin "
-        f"neutralize -d {target_db} -c {target_conf} --stop-after-init\"",
-        ws_send,
-    )
+        await ws_send("Neutralizing database...")
+    from neutralize import neutralize_db
+    stats = neutralize_db(target_db)
+    if ws_send:
+        await ws_send(f"Neutralized: {stats['crons']} crons disabled, "
+                      f"{stats['mail_servers']} mail servers disabled")
 
     # Check/reset admin password after clone
     from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser

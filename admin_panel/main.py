@@ -30,6 +30,7 @@ from setup_steps import (
     _generate_password, fix_addons_ownership,
 )
 from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser
+from neutralize import is_neutralized, neutralize_db, deneutralize_db
 from studio_bridge import (
     get_custom_addons_info, get_instance_addons, get_studio_stats,
     export_studio_to_module, convert_module_to_studio, install_or_upgrade_module,
@@ -287,7 +288,12 @@ async def instances_page(request: Request):
             status = result.stdout.strip()
         except Exception:
             status = "unknown"
-        instances[name] = {**inst, "status": status}
+        db_name = inst.get("db_name", name)
+        try:
+            neutralized = is_neutralized(db_name)
+        except Exception:
+            neutralized = None
+        instances[name] = {**inst, "status": status, "neutralized": neutralized}
 
     return templates.TemplateResponse("instances.html", {
         "request": request,
@@ -377,7 +383,12 @@ async def api_list_instances():
             status = result.stdout.strip()
         except Exception:
             status = "unknown"
-        instances[name] = {**inst, "status": status}
+        db_name = inst.get("db_name", name)
+        try:
+            neutralized = is_neutralized(db_name)
+        except Exception:
+            neutralized = None
+        instances[name] = {**inst, "status": status, "neutralized": neutralized}
     return instances
 
 
@@ -692,6 +703,32 @@ async def api_sync_to_repo(instance_name: str):
         raise HTTPException(status_code=500, detail=push.stderr)
 
     return {"status": "ok", "message": "Addons synced to repo"}
+
+
+@app.post("/api/instances/{instance_name}/neutralize")
+async def api_toggle_neutralize(instance_name: str, request: Request):
+    """Toggle neutralization for an instance."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    data = await request.json()
+    neutralized = data.get("neutralized", True)
+    db_name = instance.get("db_name", instance_name)
+
+    try:
+        if neutralized:
+            stats = neutralize_db(db_name)
+        else:
+            stats = deneutralize_db(db_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Neutralization failed: {e}")
+
+    service = instance.get("service", f"odoo-{instance_name}")
+    subprocess.run(["systemctl", "restart", service], capture_output=True, timeout=30)
+
+    return {"status": "ok", "neutralized": neutralized, "stats": stats}
 
 
 @app.get("/api/databases")

@@ -55,6 +55,7 @@
                 <th>Master PW &rsaquo; DB</th>
                 <th>Admin PW &rsaquo; Odoo</th>
                 <th>Customizations</th>
+                <th>Neutralized</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -72,6 +73,9 @@
                 <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/database/manager')" title="Copy PW & open DB manager">{{ inst.master_pw | default('–') }}</span></td>
                 <td id="adminpw-{{ name }}"><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/login?login=admin')" title="Copy PW & open Odoo login">{{ inst.admin_pw | default('–') }}</span></td>
                 <td id="cust-{{ name }}"><span style="color:var(--text-muted)">...</span></td>
+                <td>
+                    <input type="checkbox" class="neutralize-toggle" id="neutralize-{{ name }}" {% if inst.neutralized %}checked{% endif %} onchange="toggleNeutralize('{{ name }}', this.checked)">
+                </td>
                 <td id="status-{{ name }}">
                     <a href="https://{{ fqdn }}" target="_blank">
                         <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
@@ -399,6 +403,32 @@ function updateStatusUI(name, status) {
     const link = cell.querySelector('a');
     if (dot) dot.className = 'status-dot status-' + status;
     if (link) link.lastChild.textContent = ' ' + status;
+}
+
+async function toggleNeutralize(name, neutralized) {
+    const checkbox = document.getElementById('neutralize-' + name);
+    const action = neutralized ? 'neutralize' : 'deneutralize';
+    if (!confirm(`This will ${action} and restart ${name}. Continue?`)) {
+        checkbox.checked = !neutralized;
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/instances/${name}/neutralize`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({neutralized})
+        });
+        if (resp.ok) {
+            showToast(neutralized ? 'Instance neutralized' : 'Instance deneutralized');
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showToast(err.detail || 'Failed', 'error');
+            checkbox.checked = !neutralized;
+        }
+    } catch (e) {
+        showToast('Failed to toggle neutralization', 'error');
+        checkbox.checked = !neutralized;
+    }
 }
 
 StatusPoller.init(function(data, pending) {
