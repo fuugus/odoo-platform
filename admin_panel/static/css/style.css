@@ -420,6 +420,11 @@ input:focus, select:focus {
 .actions {
     display: flex;
     gap: 4px;
+    white-space: nowrap;
+}
+
+.instance-table td:nth-last-child(2) {
+    white-space: nowrap;
 }
 
 .instance-table td a {
