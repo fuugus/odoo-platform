@@ -21,6 +21,8 @@ from starlette.background import BackgroundTask
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+import psutil
+
 from config import load_config, save_config, PLATFORM_DIR
 from auth import (
     is_auth_enabled, get_current_user, is_path_exempt,
@@ -64,7 +66,64 @@ def get_public_ip() -> str:
     _public_ip_cache = "–"
     return _public_ip_cache
 
+_instance_stats: dict[str, dict] = {}
+
+
+async def _collect_instance_stats():
+    """Background task: collect per-instance CPU, RAM, disk every 15s."""
+    global _instance_stats
+    while True:
+        try:
+            config = load_config()
+            instances = config.get("instances", {})
+            stats: dict[str, dict] = {}
+
+            procs = list(psutil.process_iter(["pid", "cmdline", "cpu_percent", "memory_info"]))
+            for name, inst in instances.items():
+                conf = inst.get("conf", "")
+                cpu = 0.0
+                ram = 0
+                for p in procs:
+                    try:
+                        cmdline = " ".join(p.info.get("cmdline") or [])
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+                    if conf and conf in cmdline:
+                        cpu += p.info.get("cpu_percent", 0) or 0
+                        mem = p.info.get("memory_info")
+                        if mem:
+                            ram += mem.rss
+                stats[name] = {"cpu_percent": min(round(cpu, 1), 100.0), "ram_mb": round(ram / 1048576)}
+
+            async def _measure_disk(iname, inst):
+                version = inst.get("version", "19")
+                data_dir = f"/opt/odoo{version}/data/{iname}"
+                try:
+                    proc = await asyncio.create_subprocess_shell(
+                        f"du -sb {data_dir} 2>/dev/null",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, _ = await proc.communicate()
+                    size = int(stdout.decode().split()[0]) if stdout.strip() else 0
+                    stats[iname]["disk_mb"] = round(size / 1048576)
+                except Exception:
+                    stats[iname]["disk_mb"] = 0
+
+            await asyncio.gather(*[_measure_disk(n, i) for n, i in instances.items()])
+            _instance_stats = stats
+        except Exception:
+            pass
+        await asyncio.sleep(15)
+
+
 app = FastAPI(title="Odoo Deployment Platform", version="1.0.0")
+
+
+@app.on_event("startup")
+async def _start_stats_collector():
+    asyncio.create_task(_collect_instance_stats())
+
 
 # Static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -297,7 +356,7 @@ async def instances_page(request: Request):
             neutralized = is_neutralized(db_name)
         except Exception:
             neutralized = None
-        instances[name] = {**inst, "status": status, "neutralized": neutralized}
+        instances[name] = {**inst, "status": status, "neutralized": neutralized, **_instance_stats.get(name, {})}
 
     return templates.TemplateResponse("instances.html", {
         "request": request,
@@ -392,7 +451,7 @@ async def api_list_instances():
             neutralized = is_neutralized(db_name)
         except Exception:
             neutralized = None
-        instances[name] = {**inst, "status": status, "neutralized": neutralized}
+        instances[name] = {**inst, "status": status, "neutralized": neutralized, **_instance_stats.get(name, {})}
     return instances
 
 
@@ -1188,7 +1247,6 @@ async def api_server_info():
 @app.get("/api/system-stats")
 async def api_system_stats():
     """CPU, RAM, and disk usage stats."""
-    import psutil
     cpu = psutil.cpu_percent(interval=0.5)
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage("/")

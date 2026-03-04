@@ -50,13 +50,13 @@
                 <th>Client</th>
                 <th>Env</th>
                 <th>Version</th>
-                <th>Port</th>
                 <th>Workers</th>
-                <th>Master PW &rsaquo; DB</th>
-                <th>Admin PW &rsaquo; Odoo</th>
                 <th>Customizations</th>
                 <th>Neutralized</th>
                 <th>Status</th>
+                <th class="num">CPU</th>
+                <th class="num">RAM</th>
+                <th class="num">Disk</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -64,14 +64,11 @@
             {% for name, inst in instances.items() %}
             {% set env_prefix = inst.env | replace("_", "-") %}
             {% set fqdn = inst.client ~ "-" ~ env_prefix ~ "." ~ config.domain %}
-            <tr id="row-{{ name }}">
-                <td><a href="https://{{ fqdn }}" target="_blank">{{ inst.client }}</a></td>
+            <tr id="row-{{ name }}" data-fqdn="{{ fqdn }}" data-master-pw="{{ inst.master_pw | default('') }}" data-admin-pw="{{ inst.admin_pw | default('') }}" data-port="{{ inst.port }}{% if inst.workers | default(0) > 0 %}/{{ inst.port + 1 }}{% endif %}">
+                <td class="instance-toggle" onclick="toggleDetail('{{ name }}')">{{ inst.client }}</td>
                 <td><a href="https://{{ fqdn }}" target="_blank"><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></a></td>
                 <td>{{ inst.version | default('19') }}</td>
-                <td><a href="https://{{ fqdn }}" target="_blank">{% if inst.workers | default(0) > 0 %}{{ inst.port }}/{{ inst.port + 1 }}{% else %}{{ inst.port }}{% endif %}</a></td>
                 <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}"></td>
-                <td><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/database/manager')" title="Copy PW & open DB manager">{{ inst.master_pw | default('–') }}</span></td>
-                <td id="adminpw-{{ name }}"><span class="pw-value" onclick="copyAndOpen(this, 'https://{{ fqdn }}/web/login?login=admin')" title="Copy PW & open Odoo login">{{ inst.admin_pw | default('–') }}</span></td>
                 <td id="cust-{{ name }}"><span style="color:var(--text-muted)">...</span></td>
                 <td>
                     <input type="checkbox" class="neutralize-toggle" id="neutralize-{{ name }}" {% if inst.neutralized %}checked{% endif %} onchange="toggleNeutralize('{{ name }}', this.checked)">
@@ -82,6 +79,9 @@
                         {{ inst.status }}
                     </a>
                 </td>
+                <td class="num" id="cpu-{{ name }}">{{ '%g' % inst.cpu_percent + '%' if inst.cpu_percent is defined else '–' }}</td>
+                <td class="num" id="ram-{{ name }}">{% if inst.ram_mb is defined %}{% if inst.ram_mb >= 1024 %}{{ '%.1f' % (inst.ram_mb / 1024) }} GB{% else %}{{ inst.ram_mb }} MB{% endif %}{% else %}–{% endif %}</td>
+                <td class="num" id="disk-{{ name }}">{% if inst.disk_mb is defined %}{% if inst.disk_mb >= 1024 %}{{ '%.1f' % (inst.disk_mb / 1024) }} GB{% else %}{{ inst.disk_mb }} MB{% endif %}{% else %}–{% endif %}</td>
                 <td>
                     <div class="actions">
                     {% if inst.ssh_user %}
@@ -455,6 +455,63 @@ async function syncToRepo(name) {
     } catch (e) { showToast('Push failed', 'error'); }
 }
 
+const _adminPwMatch = {};
+
+function toggleDetail(name) {
+    const existing = document.getElementById('detail-' + name);
+    if (existing) { existing.remove(); return; }
+
+    const row = document.getElementById('row-' + name);
+    if (!row) return;
+
+    const fqdn = row.dataset.fqdn;
+    const masterPw = row.dataset.masterPw;
+    const adminPw = row.dataset.adminPw;
+    const port = row.dataset.port;
+    const cols = row.querySelectorAll('td').length;
+
+    let adminHtml;
+    if (_adminPwMatch[name] === false) {
+        adminHtml = `<a href="#" class="pw-reset-link" title="Password does not match DB" onclick="resetAdminPw(event, '${name}', 'https://${fqdn}')">reset</a>`;
+    } else {
+        adminHtml = `<a href="https://${fqdn}/web/login?login=admin" target="_blank" class="detail-link" onclick="event.preventDefault(); copyAndOpen(this, 'https://${fqdn}/web/login?login=admin')" title="Copy PW &amp; open Odoo login">${adminPw || '–'}</a>`;
+    }
+
+    const html = `<div class="instance-detail-panel">
+        <div class="detail-item"><label>URL</label><a href="https://${fqdn}" target="_blank">https://${fqdn}</a></div>
+        <div class="detail-item"><label>Port</label><span class="detail-value">${port}</span></div>
+        <div class="detail-item"><label>Master PW &rsaquo; DB</label><a href="https://${fqdn}/web/database/manager" target="_blank" class="detail-link" onclick="event.preventDefault(); copyAndOpen(this, 'https://${fqdn}/web/database/manager')" title="Copy PW &amp; open DB manager">${masterPw || '–'}</a></div>
+        <div class="detail-item"><label>Admin PW &rsaquo; Odoo</label><span id="adminpw-${name}">${adminHtml}</span></div>
+    </div>`;
+
+    const detailRow = document.createElement('tr');
+    detailRow.id = 'detail-' + name;
+    detailRow.className = 'detail-row';
+    const td = document.createElement('td');
+    td.colSpan = cols;
+    td.innerHTML = html;
+    detailRow.appendChild(td);
+    row.after(detailRow);
+}
+
+async function resetAdminPw(e, name, baseUrl) {
+    e.preventDefault();
+    try {
+        const r = await fetch(`/api/instances/${name}/reset-admin-pw`, {method: 'POST'});
+        if (!r.ok) { showToast('Reset failed', 'error'); return; }
+        const result = await r.json();
+        const pw = result.admin_pw;
+        const row = document.getElementById('row-' + name);
+        if (row) row.dataset.adminPw = pw;
+        _adminPwMatch[name] = true;
+        const cell = document.getElementById('adminpw-' + name);
+        if (cell) cell.innerHTML = `<a href="${baseUrl}/web/login?login=admin" target="_blank" class="detail-link" onclick="event.preventDefault(); copyAndOpen(this, '${baseUrl}/web/login?login=admin')" title="Copy PW &amp; open Odoo login">${pw}</a>`;
+        showToast('Admin password reset');
+    } catch (err) {
+        showToast('Reset failed', 'error');
+    }
+}
+
 function copyText(el) {
     navigator.clipboard.writeText(el.textContent);
     showToast('Copied');
@@ -501,6 +558,11 @@ async function toggleNeutralize(name, neutralized) {
     }
 }
 
+function formatSize(mb) {
+    if (mb == null) return '–';
+    return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB';
+}
+
 StatusPoller.init(function(data, pending) {
     for (const [name, inst] of Object.entries(data)) {
         const p = pending[name];
@@ -513,6 +575,12 @@ StatusPoller.init(function(data, pending) {
         if (input && !inst.restart_needed) {
             input.classList.remove('pending');
         }
+        const cpuCell = document.getElementById('cpu-' + name);
+        if (cpuCell) cpuCell.textContent = inst.cpu_percent != null ? inst.cpu_percent + '%' : '–';
+        const ramCell = document.getElementById('ram-' + name);
+        if (ramCell) ramCell.textContent = inst.ram_mb != null ? formatSize(inst.ram_mb) : '–';
+        const diskCell = document.getElementById('disk-' + name);
+        if (diskCell) diskCell.textContent = inst.disk_mb != null ? formatSize(inst.disk_mb) : '–';
     }
 });
 
@@ -557,25 +625,7 @@ StatusPoller.init(function(data, pending) {
         const resp = await fetch('/api/instances/admin-pw-status');
         const data = await resp.json();
         for (const [name, info] of Object.entries(data)) {
-            const cell = document.getElementById('adminpw-' + name);
-            if (!cell || info.match) continue;
-            const pwSpan = cell.querySelector('.pw-value');
-            if (!pwSpan) continue;
-            const baseUrl = pwSpan.getAttribute('onclick')?.match(/https:\/\/[^/]+/)?.[0] || '';
-            cell.innerHTML = '<a href="#" class="pw-reset-link" title="Password does not match DB — click to generate a new one">reset</a>';
-            cell.querySelector('.pw-reset-link').onclick = async function(e) {
-                e.preventDefault();
-                try {
-                    const r = await fetch(`/api/instances/${name}/reset-admin-pw`, {method: 'POST'});
-                    if (!r.ok) { showToast('Reset failed', 'error'); return; }
-                    const result = await r.json();
-                    const pw = result.admin_pw;
-                    cell.innerHTML = `<span class="pw-value" onclick="copyAndOpen(this, '${baseUrl}/web/login?login=admin')" title="Copy PW &amp; open Odoo login">${pw}</span>`;
-                    showToast('Admin password reset');
-                } catch (err) {
-                    showToast('Reset failed', 'error');
-                }
-            };
+            _adminPwMatch[name] = info.match;
         }
     } catch (e) {}
 })();
