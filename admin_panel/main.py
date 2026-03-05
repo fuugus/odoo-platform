@@ -1072,6 +1072,68 @@ async def ws_sync_instance(websocket: WebSocket, instance_name: str):
         await websocket.close()
 
 
+@app.websocket("/ws/instance/{instance_name}/upgrade")
+async def ws_upgrade_instance(websocket: WebSocket, instance_name: str):
+    """WebSocket endpoint for upgrading custom addons with live output."""
+    await websocket.accept()
+
+    config = load_config()
+    if not await verify_ws_auth(websocket, config):
+        await websocket.send_json({"type": "error", "message": "Authentication required"})
+        await websocket.close()
+        return
+
+    try:
+        instance = config["instances"].get(instance_name)
+        if not instance:
+            raise ValueError(f"Instance {instance_name} not found")
+
+        version = instance.get("version", "19")
+        db_name = instance["db_name"]
+        service = instance["service"]
+        conf = instance["conf"]
+        base = odoo_base_dir(version)
+        addons_dir = Path(f"{base}/data/{instance_name}/addons")
+
+        modules = [
+            d.name for d in addons_dir.iterdir()
+            if d.is_dir() and (d / "__manifest__.py").exists()
+        ] if addons_dir.exists() else []
+
+        if not modules:
+            raise ValueError("No custom addons found to upgrade")
+
+        module_list = ",".join(modules)
+
+        async def ws_send(message: str):
+            await websocket.send_json({"type": "log", "message": message})
+
+        await websocket.send_json({"type": "status", "status": "running"})
+        await ws_send(f"Upgrading modules: {module_list}")
+
+        await ws_send("Stopping service...")
+        await run_cmd(f"systemctl stop {service}", ws_send)
+
+        try:
+            await ws_send("Running module upgrade...")
+            await run_cmd(
+                f"{base}/venv/bin/python {base}/odoo/odoo-bin"
+                f" -c {conf} -u {module_list} -d {db_name}"
+                f" --stop-after-init --logfile=",
+                ws_send,
+            )
+        finally:
+            await ws_send("Starting service...")
+            await run_cmd(f"systemctl start {service}", ws_send)
+
+        await websocket.send_json({"type": "status", "status": "done"})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.send_json({"type": "status", "status": "error"})
+    finally:
+        await websocket.close()
+
+
 @app.websocket("/ws/instance/restore/{instance_name}")
 async def ws_restore_instance(websocket: WebSocket, instance_name: str):
     """WebSocket endpoint for restoring an instance from a backup with live output."""

@@ -98,6 +98,7 @@
                     {% else %}
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     {% endif %}
+                    <button class="btn btn-sm btn-warning" onclick="upgradeInstance('{{ name }}')" title="Upgrade Addons & Restart"><span class="icon icon-refresh"></span></button>
                     <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')" title="Restart"><span class="icon icon-refresh"></span></button>
                     <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')" title="Stop"><span class="icon icon-stop"></span></button>
                     <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')" title="Delete"><span class="icon icon-trash"></span></button>
@@ -284,6 +285,49 @@ async function restartInstance(name) {
         showToast('Restart failed', 'error');
     }
     StatusPoller.pollNow();
+}
+
+function upgradeInstance(name) {
+    if (!confirm(`Upgrade addons and restart ${name}?`)) return;
+
+    StatusPoller.setPending(name, 'restarting');
+    updateStatusUI(name, 'restarting');
+
+    const row = document.getElementById('row-' + name);
+    if (!row) return;
+
+    const old = document.getElementById('upgrade-log-row');
+    if (old) old.remove();
+
+    const cols = row.querySelectorAll('td').length;
+    const logRow = document.createElement('tr');
+    logRow.id = 'upgrade-log-row';
+    const td = document.createElement('td');
+    td.colSpan = cols;
+    td.innerHTML = '<div class="sync-log-inline"><pre></pre></div>';
+    logRow.appendChild(td);
+    row.after(logRow);
+
+    const logDiv = td.querySelector('.sync-log-inline');
+    let hadError = false;
+
+    connectWebSocket(`/ws/instance/${name}/upgrade`, logDiv, {
+        onStatus(status) {
+            if (status === 'done') {
+                logDiv.querySelector('pre').textContent += '\nUpgrade complete!\n';
+                showToast('Addons upgraded');
+                if (!hadError) {
+                    setTimeout(() => logRow.remove(), 2000);
+                }
+                StatusPoller.pollNow();
+            }
+        },
+        onError(msg) {
+            hadError = true;
+            showToast('Upgrade failed', 'error');
+            StatusPoller.pollNow();
+        }
+    });
 }
 
 async function stopInstance(name) {
