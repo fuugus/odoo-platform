@@ -108,6 +108,10 @@ No test suite or linter is configured.
 
 **Heroku Data-inspired flat design.** White background, purple accent (#6944ba), muted grays. System fonts, uppercase small caps for labels. SVG mask-based icons (data URIs). CSS custom properties in `:root` for theming. 3px border-radius. Cards use bottom borders (no box shadows).
 
+## Critical: Bare Repo Permissions
+
+The shared bare repos at `/opt/git/odoo{ver}-addons.git` are owned by `odoo:odoo`. The admin panel runs as root. **Any `git push` to these bare repos MUST use `sudo -u odoo git push`**, otherwise git creates objects owned by `root:root` and dev users can no longer push. Local working copy operations (add, commit, pull, fetch, status, config) run as root — only `push` needs `sudo -u odoo`.
+
 ## Project Rules
 
 - **No change-log comments in code.** Don't add comments like `# changed X to Y` or `# added by Claude`. Only add comments where we discussed important functionality worth remembering.

@@ -196,7 +196,12 @@ async def step_odoo_version(version: str, ws_send=None):
 
         # Create odoo system user (idempotent)
         await run_cmd(
-            "id -u odoo >/dev/null 2>&1 || useradd -m -d /opt -U -r -s /bin/bash odoo",
+            "id -u odoo >/dev/null 2>&1 || useradd -m -d /opt/odoo-home -U -r -s /bin/bash odoo",
+            ws_send,
+        )
+        await run_cmd("mkdir -p /opt/odoo-home && chown odoo:odoo /opt/odoo-home", ws_send)
+        await run_cmd(
+            "sudo -u odoo git config --global --add safe.directory '*'",
             ws_send,
         )
 

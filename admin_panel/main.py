@@ -759,7 +759,7 @@ async def api_sync_to_repo(instance_name: str):
         capture_output=True, text=True, timeout=10,
     )
     push = subprocess.run(
-        ["git", "-C", addons, "push", "--force"],
+        ["sudo", "-u", "odoo", "git", "-C", addons, "push", "--force"],
         capture_output=True, text=True, timeout=30,
     )
     if push.returncode != 0:

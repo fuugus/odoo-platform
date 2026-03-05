@@ -421,7 +421,7 @@ async def fix_misplaced_definitions(db_name, client, version, instance_name, ws_
                 ws
             )
             await run_cmd(f"{git} pull --no-edit", ws)
-            await run_cmd(f"{git} push", ws)
+            await run_cmd(f"sudo -u odoo {git} push", ws)
             await ws("Changes committed and pushed.")
         else:
             await ws("No file changes to commit.")
@@ -1119,7 +1119,7 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
                     capture_output=True, timeout=10,
                 )
                 subprocess.run(["git", "-C", str(inst_addons), "pull", "--no-edit"], capture_output=True, timeout=30)
-                subprocess.run(["git", "-C", str(inst_addons), "push"], capture_output=True, timeout=30)
+                subprocess.run(["sudo", "-u", "odoo", "git", "-C", str(inst_addons), "push"], capture_output=True, timeout=30)
                 pushed = True
                 await ws(f"Pushed module removal to git repo")
 
@@ -1159,7 +1159,7 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
             ws,
         )
         await run_cmd(f"git -C {instance_addons} pull --no-edit", ws)
-        await run_cmd(f"git -C {instance_addons} push", ws)
+        await run_cmd(f"sudo -u odoo git -C {instance_addons} push", ws)
 
     # Pre-install: reclaim studio_customization records and reset states so
     # odoo-bin can properly initialize the module. Without this:
