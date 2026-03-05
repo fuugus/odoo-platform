@@ -376,15 +376,18 @@ input:focus, select:focus {
     border-bottom: none;
 }
 
-.data-table tr:hover td {
+.data-table tbody tr:hover td,
+.data-table > tr:hover td {
     background: var(--primary-light);
 }
 
-.data-table tr:hover td:first-child {
+.data-table tbody tr:hover td:first-child,
+.data-table > tr:hover td:first-child {
     position: relative;
 }
 
-.data-table tr:hover td:first-child::before {
+.data-table tbody tr:hover td:first-child::before,
+.data-table > tr:hover td:first-child::before {
     content: '';
     position: absolute;
     top: -1px;
@@ -395,11 +398,13 @@ input:focus, select:focus {
     border-top: 1px solid var(--border-light);
 }
 
-.data-table tr:hover td:last-child {
+.data-table tbody tr:hover td:last-child,
+.data-table > tr:hover td:last-child {
     position: relative;
 }
 
-.data-table tr:hover td:last-child::after {
+.data-table tbody tr:hover td:last-child::after,
+.data-table > tr:hover td:last-child::after {
     content: '';
     position: absolute;
     top: -1px;
@@ -408,6 +413,58 @@ input:focus, select:focus {
     bottom: 0;
     background: var(--primary-light);
     border-top: 1px solid var(--border-light);
+}
+
+/* Instance table: disable per-row hover pseudos, group-level hover handles background */
+.instance-table .instance-group:not(.expanded) tr:hover td:first-child::before,
+.instance-table .instance-group:not(.expanded) tr:hover td:last-child::after { content: none; }
+/* Expanded: paint per-row hover gray so it blends in */
+.instance-table .instance-group.expanded tr:hover td { background: #ededf1 !important; }
+.instance-table .instance-group.expanded tr:hover td:first-child::before,
+.instance-table .instance-group.expanded tr:hover td:last-child::after {
+    background: #ededf1 !important; border-color: #ededf1 !important;
+}
+
+/* Collapsed: standard violet hover */
+.instance-table .instance-group:not(.expanded):hover .instance-data-row td {
+    background: var(--primary-light);
+}
+.instance-table .instance-group:not(.expanded):hover .instance-data-row td:first-child,
+.instance-table .instance-group:not(.expanded):hover .instance-data-row td:last-child { position: relative; }
+.instance-table .instance-group:not(.expanded):hover .instance-data-row td:first-child::before {
+    content: '' !important; position: absolute; top: -1px; left: -10px; width: 10px; bottom: 0;
+    background: var(--primary-light);
+}
+.instance-table .instance-group:not(.expanded):hover .instance-data-row td:last-child::after {
+    content: '' !important; position: absolute; top: -1px; right: -10px; width: 10px; bottom: 0;
+    background: var(--primary-light);
+}
+
+/* Expanded: persistent gray, no hover */
+.instance-group.expanded td {
+    background: #ededf1;
+}
+.instance-group.expanded .instance-data-row td:first-child,
+.instance-group.expanded .instance-data-row td:last-child { position: relative; }
+.instance-group.expanded .instance-data-row td:first-child::before {
+    content: ''; position: absolute; top: -1px; left: -10px; width: 10px; bottom: 0;
+    background: #ededf1;
+}
+.instance-group.expanded .instance-data-row td:last-child::after {
+    content: ''; position: absolute; top: -1px; right: -10px; width: 10px; bottom: 0;
+    background: #ededf1;
+}
+.instance-group.expanded .instance-actions-row td,
+.instance-group.expanded .instance-panel-row td { position: relative; }
+.instance-group.expanded .instance-actions-row td::before,
+.instance-group.expanded .instance-panel-row td::before {
+    content: ''; position: absolute; top: 0; left: -10px; width: 10px; bottom: 0;
+    background: #ededf1;
+}
+.instance-group.expanded .instance-actions-row td::after,
+.instance-group.expanded .instance-panel-row td::after {
+    content: ''; position: absolute; top: 0; right: -10px; width: 10px; bottom: 0;
+    background: #ededf1;
 }
 
 .card-lg h3 {
@@ -431,10 +488,36 @@ input:focus, select:focus {
     display: flex;
     gap: 4px;
     white-space: nowrap;
+    justify-content: flex-end;
 }
 
-.instance-table td:nth-last-child(2) {
-    white-space: nowrap;
+.instance-group {
+    cursor: pointer;
+}
+
+.instance-group:not(.expanded) .instance-data-row td {
+    border-bottom: 1px solid var(--border);
+}
+.instance-group.expanded .instance-data-row td {
+    border-bottom: none !important;
+}
+
+.instance-actions-row {
+    display: none;
+}
+.instance-group.expanded .instance-actions-row {
+    display: table-row;
+}
+.instance-actions-row td {
+    padding-top: 4px !important;
+    padding-bottom: 12px !important;
+    border-bottom: 1px solid var(--border);
+}
+
+.instance-panel-row td {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    border-bottom: none !important;
 }
 
 .data-table th.num,
@@ -639,20 +722,10 @@ input:focus, select:focus {
     word-break: break-all;
 }
 
-.instance-toggle {
-    cursor: pointer;
-}
-.instance-toggle:hover {
-    color: var(--primary);
-}
-
 .instance-detail-panel {
     display: flex;
     gap: 32px;
-    padding: 12px 16px;
-    background: var(--bg-input);
-    border-radius: 3px;
-    margin: 8px 0;
+    padding: 8px 0;
 }
 .instance-detail-panel .detail-item label {
     display: block;
@@ -670,15 +743,8 @@ input:focus, select:focus {
     cursor: pointer;
 }
 
-.detail-row td {
-    padding-top: 0 !important;
-}
-
 .ssh-setup-panel {
-    margin: 12px 0;
-    padding: 16px;
-    background: var(--bg-input);
-    border-radius: 3px;
+    padding: 8px 0;
 }
 .ssh-setup-panel label {
     font-size: 10px;
@@ -746,12 +812,6 @@ input:focus, select:focus {
     letter-spacing: 0.3px;
 }
 .ssh-key-remove { flex-shrink: 0; margin-left: 8px; }
-#ssh-setup-row td { padding: 0; }
-
-#sync-log-row td {
-    padding: 0;
-    border: none;
-}
 
 .step-card.step-locked {
     opacity: 0.45;

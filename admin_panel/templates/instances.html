@@ -57,24 +57,23 @@
                 <th class="num">CPU</th>
                 <th class="num">RAM</th>
                 <th class="num">Disk</th>
-                <th>Actions</th>
             </tr>
         </thead>
-        <tbody>
             {% for name, inst in instances.items() %}
             {% set env_prefix = inst.env | replace("_", "-") %}
             {% set fqdn = inst.client ~ "-" ~ env_prefix ~ "." ~ config.domain %}
-            <tr id="row-{{ name }}" data-fqdn="{{ fqdn }}" data-master-pw="{{ inst.master_pw | default('') }}" data-admin-pw="{{ inst.admin_pw | default('') }}" data-port="{{ inst.port }}{% if inst.workers | default(0) > 0 %}/{{ inst.port + 1 }}{% endif %}">
-                <td class="instance-toggle" onclick="toggleDetail('{{ name }}')">{{ inst.client }}</td>
+            <tbody id="group-{{ name }}" class="instance-group" onclick="toggleInstance('{{ name }}', event)">
+            <tr id="row-{{ name }}" class="instance-data-row" data-fqdn="{{ fqdn }}" data-master-pw="{{ inst.master_pw | default('') }}" data-admin-pw="{{ inst.admin_pw | default('') }}" data-port="{{ inst.port }}{% if inst.workers | default(0) > 0 %}/{{ inst.port + 1 }}{% endif %}">
+                <td>{{ inst.client }}</td>
                 <td><a href="https://{{ fqdn }}" target="_blank"><span class="badge badge-{{ inst.env }}">{{ inst.env }}</span></a></td>
                 <td>{{ inst.version | default('19') }}</td>
-                <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}"></td>
+                <td><input type="number" class="inline-input{% if inst.restart_needed %} pending{% endif %}" min="0" max="16" value="{{ inst.workers | default(0) }}" onchange="updateWorkers('{{ name }}', this.value)" id="workers-{{ name }}" onclick="event.stopPropagation()"></td>
                 <td id="cust-{{ name }}"><span style="color:var(--text-muted)">...</span></td>
                 <td>
-                    <input type="checkbox" class="neutralize-toggle" id="neutralize-{{ name }}" {% if inst.neutralized %}checked{% endif %} onchange="toggleNeutralize('{{ name }}', this.checked)">
+                    <input type="checkbox" class="neutralize-toggle" id="neutralize-{{ name }}" {% if inst.neutralized %}checked{% endif %} onchange="toggleNeutralize('{{ name }}', this.checked)" onclick="event.stopPropagation()">
                 </td>
                 <td id="status-{{ name }}">
-                    <a href="https://{{ fqdn }}" target="_blank">
+                    <a href="https://{{ fqdn }}" target="_blank" onclick="event.stopPropagation()">
                         <span class="status-dot {% if inst.status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
                         {{ inst.status }}
                     </a>
@@ -82,31 +81,33 @@
                 <td class="num" id="cpu-{{ name }}">{{ '%g' % inst.cpu_percent + '%' if inst.cpu_percent is defined else '–' }}</td>
                 <td class="num" id="ram-{{ name }}">{% if inst.ram_mb is defined %}{% if inst.ram_mb >= 1024 %}{{ '%.1f' % (inst.ram_mb / 1024) }} GB{% else %}{{ inst.ram_mb }} MB{% endif %}{% else %}–{% endif %}</td>
                 <td class="num" id="disk-{{ name }}">{% if inst.disk_mb is defined %}{% if inst.disk_mb >= 1024 %}{{ '%.1f' % (inst.disk_mb / 1024) }} GB{% else %}{{ inst.disk_mb }} MB{% endif %}{% else %}–{% endif %}</td>
-                <td>
+            </tr>
+            <tr id="actions-{{ name }}" class="instance-actions-row">
+                <td colspan="10">
                     <div class="actions">
                     {% if inst.ssh_user %}
-                    <button class="btn btn-sm btn-secondary" onclick="showSshSetup('{{ name }}', '{{ inst.ssh_user }}', '{{ inst.version | default('19') }}')" title="SSH Access"><span class="icon icon-key{% if inst.ssh_key_count %} ssh-active{% endif %}"></span></button>
-                    <button class="btn btn-sm btn-secondary" onclick="syncToRepo('{{ name }}')" title="Sync to Repo"><span class="icon icon-upload"></span></button>
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); showSshSetup('{{ name }}', '{{ inst.ssh_user }}', '{{ inst.version | default('19') }}')" title="SSH Access"><span class="icon icon-key{% if inst.ssh_key_count %} ssh-active{% endif %}"></span></button>
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); syncToRepo('{{ name }}')" title="Sync to Repo"><span class="icon icon-upload"></span></button>
                     {% else %}
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     {% endif %}
-                    <a class="btn btn-sm btn-secondary" href="/api/instances/{{ name }}/backup" title="Download Backup"><span class="icon icon-download"></span></a>
-                    <button class="btn btn-sm btn-secondary" onclick="restoreInstance('{{ name }}')" title="Restore Backup"><span class="icon icon-download icon-flip"></span></button>
+                    <a class="btn btn-sm btn-secondary" href="/api/instances/{{ name }}/backup" title="Download Backup" onclick="event.stopPropagation()"><span class="icon icon-download"></span></a>
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); restoreInstance('{{ name }}')" title="Restore Backup"><span class="icon icon-download icon-flip"></span></button>
                     {% if inst.env != 'prod' %}
-                    <button class="btn btn-sm btn-secondary" onclick="syncInstance('{{ name }}')" title="Sync from Prod"><span class="icon icon-clone"></span></button>
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); syncInstance('{{ name }}')" title="Sync from Prod"><span class="icon icon-clone"></span></button>
                     {% else %}
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     {% endif %}
-                    <button class="btn btn-sm btn-warning" onclick="upgradeInstance('{{ name }}')" title="Upgrade Addons & Restart"><span class="icon icon-refresh"></span></button>
-                    <button class="btn btn-sm btn-primary" onclick="restartInstance('{{ name }}')" title="Restart"><span class="icon icon-refresh"></span></button>
-                    <button class="btn btn-sm btn-secondary" onclick="stopInstance('{{ name }}')" title="Stop"><span class="icon icon-stop"></span></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteInstance('{{ name }}')" title="Delete"><span class="icon icon-trash"></span></button>
+                    <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); upgradeInstance('{{ name }}')" title="Upgrade Addons & Restart"><span class="icon icon-refresh"></span></button>
+                    <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); restartInstance('{{ name }}')" title="Restart"><span class="icon icon-refresh"></span></button>
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); stopInstance('{{ name }}')" title="Stop"><span class="icon icon-stop"></span></button>
+                    <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteInstance('{{ name }}')" title="Delete"><span class="icon icon-trash"></span></button>
                     </div>
                 </td>
             </tr>
+            </tbody>
             {% endfor %}
-        </tbody>
     </table>
     {% else %}
     <p class="empty-state">No instances created yet.</p>
@@ -171,22 +172,13 @@ function syncInstance(name) {
     if (!confirm(`Sync ${name} from production? This will REPLACE the current database and filestore.`)) return;
     if (!confirm('This cannot be undone. Are you sure?')) return;
 
-    const row = document.getElementById('row-' + name);
-    if (!row) return;
-
     const old = document.getElementById('sync-log-row');
     if (old) old.remove();
 
-    const cols = row.querySelectorAll('td').length;
-    const logRow = document.createElement('tr');
-    logRow.id = 'sync-log-row';
-    const td = document.createElement('td');
-    td.colSpan = cols;
-    td.innerHTML = '<div class="sync-log-inline"><pre></pre></div>';
-    logRow.appendChild(td);
-    row.after(logRow);
+    const logRow = _insertPanelRow(name, 'sync-log-row', '<div class="sync-log-inline"><pre></pre></div>');
+    if (!logRow) return;
 
-    const logDiv = td.querySelector('.sync-log-inline');
+    const logDiv = logRow.querySelector('.sync-log-inline');
     let hadError = false;
 
     connectWebSocket(`/ws/instance/sync/${name}`, logDiv, {
@@ -215,22 +207,13 @@ function restoreInstance(name) {
         if (!file) return;
         if (!confirm(`This will REPLACE the entire database and filestore of ${name} with "${file.name}". Continue?`)) return;
 
-        const row = document.getElementById('row-' + name);
-        if (!row) return;
-
         const old = document.getElementById('restore-log-row');
         if (old) old.remove();
 
-        const cols = row.querySelectorAll('td').length;
-        const logRow = document.createElement('tr');
-        logRow.id = 'restore-log-row';
-        const td = document.createElement('td');
-        td.colSpan = cols;
-        td.innerHTML = '<div class="sync-log-inline"><pre>Uploading backup...</pre></div>';
-        logRow.appendChild(td);
-        row.after(logRow);
+        const logRow = _insertPanelRow(name, 'restore-log-row', '<div class="sync-log-inline"><pre>Uploading backup...</pre></div>');
+        if (!logRow) return;
 
-        const logDiv = td.querySelector('.sync-log-inline');
+        const logDiv = logRow.querySelector('.sync-log-inline');
         const pre = logDiv.querySelector('pre');
 
         try {
@@ -293,22 +276,13 @@ function upgradeInstance(name) {
     StatusPoller.setPending(name, 'restarting');
     updateStatusUI(name, 'restarting');
 
-    const row = document.getElementById('row-' + name);
-    if (!row) return;
-
     const old = document.getElementById('upgrade-log-row');
     if (old) old.remove();
 
-    const cols = row.querySelectorAll('td').length;
-    const logRow = document.createElement('tr');
-    logRow.id = 'upgrade-log-row';
-    const td = document.createElement('td');
-    td.colSpan = cols;
-    td.innerHTML = '<div class="sync-log-inline"><pre></pre></div>';
-    logRow.appendChild(td);
-    row.after(logRow);
+    const logRow = _insertPanelRow(name, 'upgrade-log-row', '<div class="sync-log-inline"><pre></pre></div>');
+    if (!logRow) return;
 
-    const logDiv = td.querySelector('.sync-log-inline');
+    const logDiv = logRow.querySelector('.sync-log-inline');
     let hadError = false;
 
     connectWebSocket(`/ws/instance/${name}/upgrade`, logDiv, {
@@ -348,7 +322,7 @@ async function deleteInstance(name) {
     if (!confirm(`Are you sure? This cannot be undone.`)) return;
     const resp = await fetch(`/api/instances/${name}`, {method: 'DELETE'});
     if (resp.ok) {
-        document.getElementById('row-' + name)?.remove();
+        document.getElementById('group-' + name)?.remove();
         showToast('Deleted');
     } else {
         showToast('Error', 'error');
@@ -384,9 +358,6 @@ async function showSshSetup(name, sshUser, version) {
     const old = document.getElementById('ssh-setup-row');
     if (old) { old.remove(); return; }
 
-    const row = document.getElementById('row-' + name);
-    if (!row) return;
-    const cols = row.querySelectorAll('td').length;
     const host = name.replace(/_/g, '-') + '.{{ config.domain }}';
 
     let keys = [];
@@ -439,13 +410,7 @@ async function showSshSetup(name, sshUser, version) {
 
     html += '</div>';
 
-    const logRow = document.createElement('tr');
-    logRow.id = 'ssh-setup-row';
-    const td = document.createElement('td');
-    td.colSpan = cols;
-    td.innerHTML = html;
-    logRow.appendChild(td);
-    row.after(logRow);
+    _insertPanelRow(name, 'ssh-setup-row', html);
 }
 
 async function addSshKey(name, sshUser, version) {
@@ -501,10 +466,49 @@ async function syncToRepo(name) {
 
 const _adminPwMatch = {};
 
-function toggleDetail(name) {
-    const existing = document.getElementById('detail-' + name);
-    if (existing) { existing.remove(); return; }
+function _insertPanelRow(name, id, html) {
+    const row = document.getElementById('row-' + name);
+    const actionsRow = document.getElementById('actions-' + name);
+    if (!row) return null;
+    const tr = document.createElement('tr');
+    tr.id = id;
+    tr.className = 'instance-panel-row';
+    const td = document.createElement('td');
+    td.colSpan = 10;
+    td.innerHTML = html;
+    tr.appendChild(td);
+    if (actionsRow) actionsRow.before(tr);
+    else row.after(tr);
+    return tr;
+}
 
+function _collapseAll(except) {
+    document.querySelectorAll('.instance-group.expanded').forEach(g => {
+        if (g.id === 'group-' + except) return;
+        const n = g.id.replace('group-', '');
+        g.classList.remove('expanded');
+        document.getElementById('detail-' + n)?.remove();
+        document.getElementById('ssh-setup-row')?.remove();
+    });
+}
+
+function toggleInstance(name, event) {
+    if (event && (event.target.closest('a[href]') || event.target.closest('input') || event.target.closest('button') || event.target.closest('.actions'))) return;
+    const group = document.getElementById('group-' + name);
+    const isOpen = group.classList.contains('expanded');
+    if (isOpen) {
+        group.classList.remove('expanded');
+        document.getElementById('detail-' + name)?.remove();
+        document.getElementById('ssh-setup-row')?.remove();
+    } else {
+        _collapseAll(name);
+        group.classList.add('expanded');
+        _buildDetail(name);
+    }
+}
+
+function _buildDetail(name) {
+    if (document.getElementById('detail-' + name)) return;
     const row = document.getElementById('row-' + name);
     if (!row) return;
 
@@ -512,30 +516,22 @@ function toggleDetail(name) {
     const masterPw = row.dataset.masterPw;
     const adminPw = row.dataset.adminPw;
     const port = row.dataset.port;
-    const cols = row.querySelectorAll('td').length;
 
     let adminHtml;
     if (_adminPwMatch[name] === false) {
-        adminHtml = `<a href="#" class="pw-reset-link" title="Password does not match DB" onclick="resetAdminPw(event, '${name}', 'https://${fqdn}')">reset</a>`;
+        adminHtml = `<a href="#" class="pw-reset-link" title="Password does not match DB" onclick="event.stopPropagation(); resetAdminPw(event, '${name}', 'https://${fqdn}')">reset</a>`;
     } else {
-        adminHtml = `<a href="https://${fqdn}/web/login?login=admin" target="_blank" class="detail-link" onclick="event.preventDefault(); copyAndOpen(this, 'https://${fqdn}/web/login?login=admin')" title="Copy PW &amp; open Odoo login">${adminPw || '–'}</a>`;
+        adminHtml = `<a href="https://${fqdn}/web/login?login=admin" target="_blank" class="detail-link" onclick="event.stopPropagation(); event.preventDefault(); copyAndOpen(this, 'https://${fqdn}/web/login?login=admin')" title="Copy PW &amp; open Odoo login">${adminPw || '–'}</a>`;
     }
 
     const html = `<div class="instance-detail-panel">
-        <div class="detail-item"><label>URL</label><a href="https://${fqdn}" target="_blank">https://${fqdn}</a></div>
+        <div class="detail-item"><label>URL</label><a href="https://${fqdn}" target="_blank" onclick="event.stopPropagation()">https://${fqdn}</a></div>
         <div class="detail-item"><label>Port</label><span class="detail-value">${port}</span></div>
-        <div class="detail-item"><label>Master PW &rsaquo; DB</label><a href="https://${fqdn}/web/database/manager" target="_blank" class="detail-link" onclick="event.preventDefault(); copyAndOpen(this, 'https://${fqdn}/web/database/manager')" title="Copy PW &amp; open DB manager">${masterPw || '–'}</a></div>
+        <div class="detail-item"><label>Master PW &rsaquo; DB</label><a href="https://${fqdn}/web/database/manager" target="_blank" class="detail-link" onclick="event.stopPropagation(); event.preventDefault(); copyAndOpen(this, 'https://${fqdn}/web/database/manager')" title="Copy PW &amp; open DB manager">${masterPw || '–'}</a></div>
         <div class="detail-item"><label>Admin PW &rsaquo; Odoo</label><span id="adminpw-${name}">${adminHtml}</span></div>
     </div>`;
 
-    const detailRow = document.createElement('tr');
-    detailRow.id = 'detail-' + name;
-    detailRow.className = 'detail-row';
-    const td = document.createElement('td');
-    td.colSpan = cols;
-    td.innerHTML = html;
-    detailRow.appendChild(td);
-    row.after(detailRow);
+    _insertPanelRow(name, 'detail-' + name, html);
 }
 
 async function resetAdminPw(e, name, baseUrl) {
