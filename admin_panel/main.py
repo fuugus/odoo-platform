@@ -840,7 +840,8 @@ async def api_download_addons(instance_name: str):
     slug = instance_name.replace("_", "-")
     filename = f"{stamp}-{slug}-addons.zip"
 
-    tmp_dir = _tempfile.mkdtemp()
+    tmp_dir = _tempfile.mkdtemp(prefix="addons-zip-")
+    os.chmod(tmp_dir, 0o777)
     zip_path = os.path.join(tmp_dir, filename)
 
     if Path(f"{addons}/.git").exists():
