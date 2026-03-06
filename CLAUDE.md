@@ -108,9 +108,14 @@ No test suite or linter is configured.
 
 **Heroku Data-inspired flat design.** White background, purple accent (#6944ba), muted grays. System fonts, uppercase small caps for labels. SVG mask-based icons (data URIs). CSS custom properties in `:root` for theming. 3px border-radius. Cards use bottom borders (no box shadows).
 
-## Critical: Bare Repo Permissions
+## Critical: Git Permissions
 
-The shared bare repos at `/opt/git/odoo{ver}-addons.git` are owned by `odoo:odoo`. The admin panel runs as root. **Any `git push` to these bare repos MUST use `sudo -u odoo git push`**, otherwise git creates objects owned by `root:root` and dev users can no longer push. Local working copy operations (add, commit, pull, fetch, status, config) run as root — only `push` needs `sudo -u odoo`.
+The admin panel runs as root. All git operations on instance working copies and bare repos **MUST run as the correct user** to avoid creating files with wrong ownership:
+
+- **Working copy operations** (add, commit, pull, fetch, status, config): `sudo -u {owner}` where owner = `get_instance_owner(instance)` (e.g., `dev-samuel` for dev instances, `odoo` for prod)
+- **Push to bare repos** (`/opt/git/odoo{ver}-addons.git`): always `sudo -u odoo git push`
+
+Never run bare `git` commands (without sudo -u) on instance addons directories — root-owned objects break dev access.
 
 ## Project Rules
 

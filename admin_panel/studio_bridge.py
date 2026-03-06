@@ -19,7 +19,7 @@ import psycopg2
 import psycopg2.extras
 
 from config import load_config, PLATFORM_DIR
-from setup_steps import run_cmd, odoo_base_dir
+from setup_steps import run_cmd, odoo_base_dir, get_instance_owner
 
 
 FIELD_TYPE_MAP = {
@@ -412,7 +412,9 @@ async def fix_misplaced_definitions(db_name, client, version, instance_name, ws_
 
         # --- Git: commit the file changes ---
         await ws("\nCommitting file changes...")
-        git = f"git -C {addons_dir}"
+        _cfg = load_config()
+        _owner = get_instance_owner(_cfg.get("instances", {}).get(instance_name, {}))
+        git = f"sudo -u {_owner} git -C {addons_dir}"
         await run_cmd(f"{git} add -A", ws)
         _, status_out = await run_cmd(f"{git} status --porcelain", ws)
         if status_out.strip():
@@ -421,7 +423,7 @@ async def fix_misplaced_definitions(db_name, client, version, instance_name, ws_
                 ws
             )
             await run_cmd(f"{git} pull --no-edit", ws)
-            await run_cmd(f"sudo -u odoo {git} push", ws)
+            await run_cmd(f"sudo -u odoo git -C {addons_dir} push", ws)
             await ws("Changes committed and pushed.")
         else:
             await ws("No file changes to commit.")
@@ -1113,12 +1115,13 @@ async def convert_module_to_studio(db_name, client, ws_send=None):
             # Git commit/push from first instance that has a repo
             if not pushed and (inst_addons / ".git").exists():
                 import subprocess
-                subprocess.run(["git", "-C", str(inst_addons), "add", "-A"], capture_output=True, timeout=10)
+                _owner = get_instance_owner(inst)
+                subprocess.run(["sudo", "-u", _owner, "git", "-C", str(inst_addons), "add", "-A"], capture_output=True, timeout=10)
                 subprocess.run(
-                    ["git", "-C", str(inst_addons), "commit", "-m", f"Revert: remove {module_name}"],
+                    ["sudo", "-u", _owner, "git", "-C", str(inst_addons), "commit", "-m", f"Revert: remove {module_name}"],
                     capture_output=True, timeout=10,
                 )
-                subprocess.run(["git", "-C", str(inst_addons), "pull", "--no-edit"], capture_output=True, timeout=30)
+                subprocess.run(["sudo", "-u", _owner, "git", "-C", str(inst_addons), "pull", "--no-edit"], capture_output=True, timeout=30)
                 subprocess.run(["sudo", "-u", "odoo", "git", "-C", str(inst_addons), "push"], capture_output=True, timeout=30)
                 pushed = True
                 await ws(f"Pushed module removal to git repo")
@@ -1150,15 +1153,16 @@ async def install_or_upgrade_module(instance_name, module_name, operation, ws_se
     await run_cmd(f"systemctl stop {service}", ws)
 
     # Commit and push addons changes to shared repo
+    owner = get_instance_owner(instance)
     if Path(f"{instance_addons}/.git").exists():
         await ws("Committing addons to git repo...")
-        await run_cmd(f"git -C {instance_addons} add -A", ws)
+        await run_cmd(f"sudo -u {owner} git -C {instance_addons} add -A", ws)
         await run_cmd(
-            f"git -C {instance_addons} diff --cached --quiet || "
-            f"git -C {instance_addons} commit -m 'Studio Bridge: {op_label.lower()} {module_name}'",
+            f"sudo -u {owner} git -C {instance_addons} diff --cached --quiet || "
+            f"sudo -u {owner} git -C {instance_addons} commit -m 'Studio Bridge: {op_label.lower()} {module_name}'",
             ws,
         )
-        await run_cmd(f"git -C {instance_addons} pull --no-edit", ws)
+        await run_cmd(f"sudo -u {owner} git -C {instance_addons} pull --no-edit", ws)
         await run_cmd(f"sudo -u odoo git -C {instance_addons} push", ws)
 
     # Pre-install: reclaim studio_customization records and reset states so

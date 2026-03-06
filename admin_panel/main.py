@@ -32,7 +32,7 @@ from setup_steps import (
     SETUP_STEPS, STEP_ORDER, STEP_DEPS, VERSION_STEPS,
     is_step_unlocked, get_installed_versions, odoo_base_dir,
     create_odoo_instance, delete_odoo_instance, sync_instance_from_prod, run_cmd,
-    _generate_password, fix_addons_ownership,
+    _generate_password, fix_addons_ownership, get_instance_owner,
     backup_instance, restore_instance,
 )
 from admin_pw import verify_admin_pw, reset_admin_pw, normalize_superuser
@@ -746,16 +746,17 @@ async def api_sync_to_repo(instance_name: str):
         raise HTTPException(status_code=400, detail="No git repo in addons directory")
 
     # Stage, commit, and force-push to overwrite shared repo
-    subprocess.run(["git", "-C", addons, "add", "-A"], capture_output=True, timeout=10)
+    owner = get_instance_owner(instance)
+    subprocess.run(["sudo", "-u", owner, "git", "-C", addons, "add", "-A"], capture_output=True, timeout=10)
     status = subprocess.run(
-        ["git", "-C", addons, "status", "--porcelain"],
+        ["sudo", "-u", owner, "git", "-C", addons, "status", "--porcelain"],
         capture_output=True, text=True, timeout=10,
     )
     if not status.stdout.strip():
         return {"status": "ok", "message": "Nothing to sync — already up to date"}
 
     subprocess.run(
-        ["git", "-C", addons, "commit", "-m", f"Sync from {instance_name}"],
+        ["sudo", "-u", owner, "git", "-C", addons, "commit", "-m", f"Sync from {instance_name}"],
         capture_output=True, text=True, timeout=10,
     )
     push = subprocess.run(
@@ -911,10 +912,11 @@ async def api_deploy(request: Request):
     instance_addons = f"{base}/data/{instance_name}/addons"
 
     # Git pull from local bare repo
+    owner = get_instance_owner(instance)
     git_output = ""
     if Path(f"{instance_addons}/.git").exists():
         result = subprocess.run(
-            ["git", "-C", instance_addons, "pull"],
+            ["sudo", "-u", owner, "git", "-C", instance_addons, "pull"],
             capture_output=True, text=True, timeout=30,
         )
         git_output = result.stdout.strip() or result.stderr.strip()
@@ -925,7 +927,6 @@ async def api_deploy(request: Request):
                 "instance": instance_name,
                 "message": "Git pull failed — instance was NOT restarted.",
             }
-        await fix_addons_ownership(instance_name, config)
     else:
         git_output = "(no git repo in addons directory)"
 

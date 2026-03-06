@@ -624,8 +624,8 @@ async def create_odoo_instance(client: str, env: str, port: int, workers: int = 
             await ws_send("Cloning addons from local git repo...")
         await run_cmd(f"git clone {bare_repo} {instance_addons}", ws_send)
         await run_cmd(f"chown -R odoo:odoo {instance_addons}", ws_send)
-        await run_cmd(f"git -C {instance_addons} config user.name Deploy", ws_send)
-        await run_cmd(f"git -C {instance_addons} config user.email deploy@odoo-platform", ws_send)
+        await run_cmd(f"sudo -u odoo git -C {instance_addons} config user.name Deploy", ws_send)
+        await run_cmd(f"sudo -u odoo git -C {instance_addons} config user.email deploy@odoo-platform", ws_send)
     else:
         await run_cmd(f"mkdir -p {instance_addons}", ws_send)
         await run_cmd(f"chown odoo:odoo {instance_addons}", ws_send)
@@ -754,9 +754,9 @@ WantedBy=multi-user.target
         await run_cmd(f"chown -R {ssh_user}:odoo {instance_addons}", ws_send)
         await run_cmd(f"chmod -R g+ws {instance_addons}", ws_send)
         # Configure git identity for dev user
-        await run_cmd(f"git -C {instance_addons} config user.name {dev_name.capitalize()}", ws_send)
-        await run_cmd(f"git -C {instance_addons} config user.email {dev_name}@odoo-platform", ws_send)
-        await run_cmd(f"git config -f {data_dir}/.gitconfig --add safe.directory '*'", ws_send)
+        await run_cmd(f"sudo -u {ssh_user} git -C {instance_addons} config user.name {dev_name.capitalize()}", ws_send)
+        await run_cmd(f"sudo -u {ssh_user} git -C {instance_addons} config user.email {dev_name}@odoo-platform", ws_send)
+        await run_cmd(f"sudo -u {ssh_user} git config -f {data_dir}/.gitconfig --add safe.directory '*'", ws_send)
         await run_cmd(f"chown {ssh_user}:odoo {data_dir}/.gitconfig", ws_send)
         await run_cmd(f"mkdir -p {data_dir}/.ssh", ws_send)
         await run_cmd(f"touch {data_dir}/.ssh/authorized_keys", ws_send)
@@ -944,9 +944,9 @@ async def sync_instance_from_prod(instance_name: str, ws_send=None):
     if Path(f"{target_addons}/.git").exists():
         if ws_send:
             await ws_send("Pulling latest addons from git repo...")
-        await run_cmd(f"git -C {target_addons} fetch origin", ws_send)
-        await run_cmd(f"git -C {target_addons} reset --hard origin/main", ws_send)
-        await fix_addons_ownership(instance_name, ws_send=ws_send)
+        owner = get_instance_owner(config["instances"].get(instance_name, {}))
+        await run_cmd(f"sudo -u {owner} git -C {target_addons} fetch origin", ws_send)
+        await run_cmd(f"sudo -u {owner} git -C {target_addons} reset --hard origin/main", ws_send)
 
     # Neutralize the cloned database
     if ws_send:
