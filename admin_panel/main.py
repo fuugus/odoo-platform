@@ -822,6 +822,50 @@ async def api_backup_instance(instance_name: str):
     )
 
 
+@app.get("/api/instances/{instance_name}/addons-zip")
+async def api_download_addons(instance_name: str):
+    """Download the instance's custom addons directory as a zip (respects .gitignore)."""
+    config = load_config()
+    instance = config["instances"].get(instance_name)
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+    version = instance.get("version", "19")
+    addons = Path(f"{odoo_base_dir(version)}/data/{instance_name}/addons")
+    if not addons.exists():
+        raise HTTPException(status_code=404, detail="Addons directory not found")
+
+    from datetime import datetime
+    stamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
+    slug = instance_name.replace("_", "-")
+    filename = f"{stamp}-{slug}-addons.zip"
+
+    tmp_dir = _tempfile.mkdtemp()
+    zip_path = os.path.join(tmp_dir, filename)
+
+    if Path(f"{addons}/.git").exists():
+        owner = get_instance_owner(instance)
+        result = subprocess.run(
+            ["sudo", "-u", owner, "git", "-C", str(addons), "archive", "--format=zip", "-o", zip_path, "HEAD"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise HTTPException(status_code=500, detail=result.stderr)
+    else:
+        shutil.make_archive(zip_path.removesuffix(".zip"), "zip", str(addons.parent), addons.name)
+
+    def cleanup():
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return FileResponse(
+        path=zip_path,
+        media_type="application/zip",
+        filename=filename,
+        background=BackgroundTask(cleanup),
+    )
+
+
 _pending_uploads: dict[str, str] = {}
 
 

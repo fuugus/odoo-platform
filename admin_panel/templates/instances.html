@@ -92,6 +92,7 @@
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     <span class="btn btn-sm btn-placeholder"><span class="icon"></span></span>
                     {% endif %}
+                    <a class="btn btn-sm btn-secondary" href="/api/instances/{{ name }}/addons-zip" title="Download Addons" onclick="event.stopPropagation()"><span class="icon icon-code"></span></a>
                     <a class="btn btn-sm btn-secondary" href="/api/instances/{{ name }}/backup" title="Download Backup" onclick="event.stopPropagation()"><span class="icon icon-download"></span></a>
                     <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); restoreInstance('{{ name }}')" title="Restore Backup"><span class="icon icon-download icon-flip"></span></button>
                     {% if inst.env != 'prod' %}
