@@ -750,7 +750,7 @@ WantedBy=multi-user.target
             ws_send,
         )
         await run_cmd(f"chown {ssh_user}:odoo {data_dir}", ws_send)
-        await run_cmd(f"chmod 755 {data_dir}", ws_send)
+        await run_cmd(f"chmod 775 {data_dir}", ws_send)
         await run_cmd(f"chown -R {ssh_user}:odoo {instance_addons}", ws_send)
         await run_cmd(f"chmod -R g+ws {instance_addons}", ws_send)
         # Configure git identity for dev user
