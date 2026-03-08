@@ -854,33 +854,42 @@ async def delete_odoo_instance(instance_name: str, ws_send=None):
     version = instance.get("version", "19")
     base = odoo_base_dir(version)
 
+    async def _safe(cmd, label=None):
+        """Run a cleanup command, log but don't abort on failure."""
+        try:
+            await run_cmd(cmd, ws_send)
+        except Exception as e:
+            msg = f"Warning: {label or cmd} — {e}"
+            if ws_send:
+                await ws_send(msg)
+
     service = instance["service"]
-    await run_cmd(f"systemctl stop {service}", ws_send)
-    await run_cmd(f"systemctl disable {service}", ws_send)
-    await run_cmd(f"rm -f /etc/systemd/system/{service}.service", ws_send)
-    await run_cmd(f"rm -f {instance['conf']}", ws_send)
-    await run_cmd("systemctl daemon-reload", ws_send)
+    await _safe(f"systemctl stop {service}", "stop service")
+    await _safe(f"systemctl disable {service}", "disable service")
+    await _safe(f"rm -f /etc/systemd/system/{service}.service", "remove service file")
+    await _safe(f"rm -f {instance['conf']}", "remove config")
+    await _safe("systemctl daemon-reload", "daemon-reload")
 
     # Drop database
     db_name = instance["db_name"]
-    await run_cmd(
-        f'su - postgres -c "dropdb --if-exists {db_name}"',
-        ws_send,
-    )
+    await _safe(f'su - postgres -c "dropdb --if-exists {db_name}"', "drop database")
 
     # Remove SSH user and sudoers if exists
     ssh_user = instance.get("ssh_user")
     if ssh_user:
-        await run_cmd(f"rm -f /etc/sudoers.d/{ssh_user}", ws_send)
-        await run_cmd(f"userdel {ssh_user} 2>/dev/null || true", ws_send)
+        await _safe(f"rm -f /etc/sudoers.d/{ssh_user}", "remove sudoers")
+        await _safe(f"userdel {ssh_user} 2>/dev/null || true", "remove user")
 
     # Clean up data directory
     data_dir = f"{base}/data/{instance_name}"
-    await run_cmd(f"rm -rf {data_dir}", ws_send)
+    await _safe(f"rm -rf {data_dir}", "remove data directory")
 
     # Remove Nginx config
-    await remove_instance_nginx_conf(instance_name, ws_send)
-    await reload_nginx(ws_send)
+    try:
+        await remove_instance_nginx_conf(instance_name, ws_send)
+    except Exception:
+        pass
+    await _safe("nginx -t && systemctl reload nginx", "reload nginx")
 
     del config["instances"][instance_name]
     save_config(config)
