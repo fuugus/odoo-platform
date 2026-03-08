@@ -630,6 +630,30 @@ async def create_odoo_instance(client: str, env: str, port: int, workers: int = 
         await run_cmd(f"mkdir -p {instance_addons}", ws_send)
         await run_cmd(f"chown odoo:odoo {instance_addons}", ws_send)
 
+    # Generate CLAUDE.md for dev guidance
+    odoo_bin = f"/opt/odoo{version}/venv/bin/python3 /opt/odoo{version}/odoo/odoo-bin"
+    odoo_conf = f"/etc/odoo/{instance_name}.conf"
+    claude_md = f"""# {client} — Odoo {version} Custom Addons
+
+This is the custom addons directory for the **{client}** client.
+
+## Rules
+
+- Only create or modify addons prefixed with `{client}_` (e.g., `{client}_base`, `{client}_website`).
+- Do not touch addons belonging to other clients.
+- Follow standard Odoo {version} module structure: `__manifest__.py`, `__init__.py`, models/, views/, security/, etc.
+
+## Commands
+
+- Restart Odoo: `sudo systemctl restart odoo-{instance_name}`
+- View logs: `sudo journalctl -u odoo-{instance_name} -f`
+- Install a module: `{odoo_bin} -c {odoo_conf} --stop-after-init -i <module_name>`
+- Upgrade a module: `{odoo_bin} -c {odoo_conf} --stop-after-init -u <module_name>`
+"""
+    claude_md_path = f"{instance_addons}/CLAUDE.md"
+    Path(claude_md_path).write_text(claude_md)
+    await run_cmd(f"chown odoo:odoo {claude_md_path}", ws_send)
+
     # Determine SMTP settings
     if env == "prod":
         smtp_host = "localhost"
