@@ -614,8 +614,8 @@ async def create_odoo_instance(client: str, env: str, port: int, workers: int = 
     master_pw = _generate_password()
     admin_pw = _generate_password()
 
-    await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir}", ws_send)
-    await run_cmd(f"chown odoo:odoo {data_dir} {log_dir}", ws_send)
+    await run_cmd(f"mkdir -p {conf_dir} {log_dir} {data_dir} {data_dir}/sessions {data_dir}/filestore", ws_send)
+    await run_cmd(f"chown odoo:odoo {data_dir} {data_dir}/sessions {data_dir}/filestore {log_dir}", ws_send)
 
     # Clone custom addons from local bare repo
     bare_repo = f"/opt/git/odoo{version}-addons.git"
@@ -750,7 +750,7 @@ WantedBy=multi-user.target
             ws_send,
         )
         await run_cmd(f"chown {ssh_user}:odoo {data_dir}", ws_send)
-        await run_cmd(f"chmod 775 {data_dir}", ws_send)
+        await run_cmd(f"chmod 755 {data_dir}", ws_send)
         await run_cmd(f"chown -R {ssh_user}:odoo {instance_addons}", ws_send)
         await run_cmd(f"chmod -R g+ws {instance_addons}", ws_send)
         # Configure git identity for dev user
