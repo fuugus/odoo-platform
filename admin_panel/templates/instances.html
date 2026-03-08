@@ -494,7 +494,7 @@ function _collapseAll(except) {
 }
 
 function toggleInstance(name, event) {
-    if (event && (event.target.closest('a[href]') || event.target.closest('input') || event.target.closest('button') || event.target.closest('.actions'))) return;
+    if (event && (event.target.closest('.instance-panel-row') || event.target.closest('a[href]') || event.target.closest('input') || event.target.closest('button') || event.target.closest('.actions'))) return;
     const group = document.getElementById('group-' + name);
     const isOpen = group.classList.contains('expanded');
     if (isOpen) {
