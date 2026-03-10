@@ -45,7 +45,7 @@ async def run_cmd(cmd: str, ws_send=None, env=None) -> tuple[int, str]:
 # ─── Step 1: System Update ──────────────────────────────────────────────────
 
 async def step_system_update(ws_send=None):
-    """Update system packages and install base dependencies."""
+    """Update system packages, install base dependencies, fonts, and wkhtmltopdf."""
     update_step_status("system_update", "running")
     try:
         await run_cmd("apt-get update -y", ws_send)
@@ -56,10 +56,24 @@ async def step_system_update(ws_send=None):
             "libxml2-dev libxslt1-dev libldap2-dev libsasl2-dev "
             "libtiff5-dev libjpeg8-dev libopenjp2-7-dev zlib1g-dev "
             "libfreetype6-dev liblcms2-dev libwebp-dev libharfbuzz-dev "
-            "libfribidi-dev libxcb1-dev libpq-dev "
-            "xfonts-75dpi xfonts-base fontconfig",
+            "libfribidi-dev libxcb1-dev libpq-dev libcairo2-dev "
+            "xfonts-75dpi xfonts-base fontconfig "
+            "fonts-dejavu-core fonts-freefont-ttf fonts-noto-core "
+            "fonts-font-awesome fonts-inconsolata fonts-roboto-unhinted gsfonts",
             ws_send,
         )
+
+        # wkhtmltopdf with patched Qt (required by Odoo for PDF reports)
+        if ws_send:
+            await ws_send("Installing wkhtmltopdf...")
+        wk_url = (
+            "https://github.com/wkhtmltopdf/packaging/releases/download/"
+            "0.12.6.1-3/wkhtmltox_0.12.6.1-3.jammy_amd64.deb"
+        )
+        await run_cmd(f"wget -q -O /tmp/wkhtmltox.deb {wk_url}", ws_send)
+        await run_cmd("apt-get install -y -f /tmp/wkhtmltox.deb", ws_send)
+        await run_cmd("rm -f /tmp/wkhtmltox.deb", ws_send)
+
         update_step_status("system_update", "done")
         if ws_send:
             await ws_send("OK System update complete")
@@ -110,31 +124,7 @@ async def step_postgresql(ws_send=None):
         raise
 
 
-# ─── Step 3: wkhtmltopdf ────────────────────────────────────────────────────
-
-async def step_wkhtmltopdf(ws_send=None):
-    """Install wkhtmltopdf with patched Qt (required by Odoo for PDF reports)."""
-    update_step_status("wkhtmltopdf", "running")
-    try:
-        wk_url = (
-            "https://github.com/wkhtmltopdf/packaging/releases/download/"
-            "0.12.6.1-3/wkhtmltox_0.12.6.1-3.jammy_amd64.deb"
-        )
-        await run_cmd(f"wget -q -O /tmp/wkhtmltox.deb {wk_url}", ws_send)
-        await run_cmd("apt-get install -y -f /tmp/wkhtmltox.deb", ws_send)
-        await run_cmd("rm /tmp/wkhtmltox.deb", ws_send)
-
-        update_step_status("wkhtmltopdf", "done")
-        if ws_send:
-            await ws_send("OK wkhtmltopdf installed")
-    except Exception as e:
-        update_step_status("wkhtmltopdf", "error", str(e))
-        if ws_send:
-            await ws_send(f"Error: {e}")
-        raise
-
-
-# ─── Step 4/5: Odoo Version Source Install ──────────────────────────────────
+# ─── Step 3/4: Odoo Version Source Install ──────────────────────────────────
 
 def odoo_base_dir(version: str) -> str:
     """Return the base directory for a given Odoo version, e.g. /opt/odoo19."""
@@ -244,6 +234,13 @@ async def step_odoo_version(version: str, ws_send=None):
         )
         await run_cmd(
             f"{venv_dir}/bin/pip install --quiet -r {odoo_src}/requirements.txt",
+            ws_send,
+        )
+        # rl-renderPM is needed by reportlab 4.x for PDF rendering (barcodes, images)
+        # but Odoo's requirements.txt only includes it for Windows, expecting the deb
+        # package python3-renderpm on Linux — which doesn't exist in a venv setup.
+        await run_cmd(
+            f"{venv_dir}/bin/pip install --quiet rl-renderPM",
             ws_send,
         )
 
@@ -1194,9 +1191,8 @@ VERSION_STEPS = {"odoo_19", "odoo_18"}
 STEP_DEPS = {
     "system_update": [],
     "postgresql": ["system_update"],
-    "wkhtmltopdf": ["postgresql"],
-    "odoo_19": ["wkhtmltopdf"],
-    "odoo_18": ["wkhtmltopdf"],
+    "odoo_19": ["postgresql"],
+    "odoo_18": ["postgresql"],
     "nginx": [("odoo_19", "odoo_18")],
     "mailpit": ["nginx"],
     "dns_check": ["mailpit"],
@@ -1204,7 +1200,7 @@ STEP_DEPS = {
 }
 
 STEP_ORDER = [
-    "system_update", "postgresql", "wkhtmltopdf",
+    "system_update", "postgresql",
     "odoo_19", "odoo_18",
     "nginx", "mailpit", "dns_check", "ssl_certs",
 ]
@@ -1212,7 +1208,6 @@ STEP_ORDER = [
 SETUP_STEPS = {
     "system_update": step_system_update,
     "postgresql": step_postgresql,
-    "wkhtmltopdf": step_wkhtmltopdf,
     "odoo_19": step_odoo_19,
     "odoo_18": step_odoo_18,
     "nginx": step_nginx,

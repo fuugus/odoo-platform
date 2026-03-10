@@ -19,9 +19,8 @@ DEFAULT_CONFIG = {
         "18": "",
     },
     "setup_steps": {
-        "system_update": {"status": "pending", "label": "System Update & Packages", "description": "Installs build tools, Python dev headers, and image libraries.", "message": ""},
+        "system_update": {"status": "pending", "label": "System Update & Packages", "description": "Installs build tools, Python dev headers, image libraries, fonts, and wkhtmltopdf.", "message": ""},
         "postgresql": {"status": "pending", "label": "PostgreSQL 16", "description": "Adds the official PostgreSQL repo and installs v16.", "message": ""},
-        "wkhtmltopdf": {"status": "pending", "label": "wkhtmltopdf", "description": "Patched Qt build required by Odoo for PDF reports.", "message": ""},
         "odoo_19": {"status": "pending", "label": "Odoo 19 Source", "description": "Clones Community + Enterprise 19.0, creates Python venv.", "message": ""},
         "odoo_18": {"status": "pending", "label": "Odoo 18 Source", "description": "Clones Community + Enterprise 18.0, creates Python venv.", "message": ""},
         "nginx": {"status": "pending", "label": "Nginx Reverse Proxy", "description": "Routes subdomains to Odoo instances by port.", "message": ""},
@@ -87,6 +86,14 @@ def migrate_config(config: dict) -> dict:
         if "ssh_key_set" in inst:
             inst["ssh_key_count"] = 1 if inst.pop("ssh_key_set") else 0
             changed = True
+
+    # Merge wkhtmltopdf step into system_update
+    if "wkhtmltopdf" in steps:
+        wk_status = steps.pop("wkhtmltopdf").get("status", "pending")
+        su = steps.get("system_update", {})
+        if wk_status == "done" and su.get("status") == "done":
+            su["description"] = "Installs build tools, Python dev headers, image libraries, fonts, and wkhtmltopdf."
+        changed = True
 
     # Auto-generate session_secret if empty
     auth = config.get("auth", {})
