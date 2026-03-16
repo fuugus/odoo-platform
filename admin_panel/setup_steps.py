@@ -596,6 +596,45 @@ def _generate_password(length=16):
 _NAME_RE = re.compile(r'^[a-z]+(-[a-z]+)*$')
 
 
+async def _rebuild_dev_sudoers(ssh_user: str, current_instance: str, current_version: str, config: dict, ws_send=None, exclude_instance: str = None):
+    """Rebuild sudoers for a dev user, covering ALL their instances."""
+    sudoers_file = f"/etc/sudoers.d/{ssh_user}"
+    sudoers_lines = []
+    odoo_bin_versions = set()
+
+    for inst_name, inst in config.get("instances", {}).items():
+        if inst_name == exclude_instance:
+            continue
+        if inst.get("ssh_user") != ssh_user:
+            continue
+        service = inst["service"]
+        ver = inst.get("version", "19")
+        sudoers_lines.append(f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start {service}")
+        sudoers_lines.append(f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop {service}")
+        sudoers_lines.append(f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart {service}")
+        odoo_bin_versions.add(ver)
+
+    # Include the current instance being created (not yet in config)
+    if current_instance and current_instance not in config.get("instances", {}):
+        service = f"odoo-{current_instance}"
+        sudoers_lines.append(f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start {service}")
+        sudoers_lines.append(f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop {service}")
+        sudoers_lines.append(f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart {service}")
+        odoo_bin_versions.add(current_version)
+
+    for ver in sorted(odoo_bin_versions):
+        base = odoo_base_dir(ver)
+        odoo_bin = f"{base}/venv/bin/python3 {base}/odoo/odoo-bin"
+        sudoers_lines.append(f"{ssh_user} ALL=(odoo) NOPASSWD: {odoo_bin} *")
+
+    if sudoers_lines:
+        with open(sudoers_file, "w") as f:
+            f.write("\n".join(sudoers_lines) + "\n")
+        await run_cmd(f"chmod 440 {sudoers_file}", ws_send)
+    else:
+        Path(sudoers_file).unlink(missing_ok=True)
+
+
 async def create_odoo_instance(client: str, env: str, port: int, workers: int = 2, ws_send=None, version: str = "19"):
     """Create a new Odoo instance with its own systemd service and config."""
     if not _NAME_RE.match(client):
@@ -626,6 +665,44 @@ async def create_odoo_instance(client: str, env: str, port: int, workers: int = 
     else:
         await run_cmd(f"mkdir -p {instance_addons}", ws_send)
         await run_cmd(f"chown odoo:odoo {instance_addons}", ws_send)
+
+    # Generate instance-specific CLAUDE.md in data dir (parent of addons git repo)
+    conf_path = f"{conf_dir}/{instance_name}.conf"
+    service = f"odoo-{instance_name}"
+    odoo_bin = f"{base}/venv/bin/python3 {base}/odoo/odoo-bin"
+    claude_md = f"""# {instance_name} — Instance Context
+
+You are working on the **{instance_name}** Odoo instance.
+
+- Instance name: `{instance_name}`
+- Service: `{service}`
+- Database: `{db_name}`
+- Config: `{conf_path}`
+
+## Quick Commands
+
+```bash
+# Restart
+sudo systemctl restart {service}
+
+# Logs
+journalctl -u {service} -f
+
+# Upgrade a module
+sudo systemctl stop {service}
+sudo -u odoo {odoo_bin} -c {conf_path} -d {db_name} -u <module> --stop-after-init --logfile=
+sudo systemctl start {service}
+
+# Install a module
+sudo systemctl stop {service}
+sudo -u odoo {odoo_bin} -c {conf_path} -d {db_name} -i <module> --stop-after-init --logfile=
+sudo systemctl start {service}
+```
+"""
+    claude_md_path = f"{data_dir}/CLAUDE.md"
+    Path(claude_md_path).write_text(claude_md)
+    owner = ssh_user if ssh_user else "odoo"
+    await run_cmd(f"chown {owner}:odoo {claude_md_path}", ws_send)
 
     # Determine SMTP settings
     if env == "prod":
@@ -660,7 +737,6 @@ limit_memory_soft = 2147483648
 limit_time_cpu = 600
 limit_time_real = 1200
 """
-    conf_path = f"{conf_dir}/{instance_name}.conf"
     with open(conf_path, "w") as f:
         f.write(odoo_conf)
 
@@ -762,18 +838,7 @@ WantedBy=multi-user.target
 
         # Grant limited sudo: service control + odoo-bin for module upgrades
         await run_cmd(f"usermod -aG systemd-journal {ssh_user}", ws_send)
-        sudoers_file = f"/etc/sudoers.d/{ssh_user}"
-        service = f"odoo-{instance_name}"
-        odoo_bin = f"{base}/venv/bin/python3 {base}/odoo/odoo-bin"
-        sudoers_lines = [
-            f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start {service}",
-            f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop {service}",
-            f"{ssh_user} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart {service}",
-            f"{ssh_user} ALL=(odoo) NOPASSWD: {odoo_bin} *",
-        ]
-        with open(sudoers_file, "w") as f:
-            f.write("\n".join(sudoers_lines) + "\n")
-        await run_cmd(f"chmod 440 {sudoers_file}", ws_send)
+        await _rebuild_dev_sudoers(ssh_user, instance_name, version, config, ws_send)
 
     # Update config
     config = load_config()
@@ -850,8 +915,15 @@ async def delete_odoo_instance(instance_name: str, ws_send=None):
     # Remove SSH user and sudoers if exists
     ssh_user = instance.get("ssh_user")
     if ssh_user:
-        await _safe(f"rm -f /etc/sudoers.d/{ssh_user}", "remove sudoers")
-        await _safe(f"userdel {ssh_user} 2>/dev/null || true", "remove user")
+        # Check if this user has other instances before removing
+        other_instances = [n for n, i in config.get("instances", {}).items()
+                          if n != instance_name and i.get("ssh_user") == ssh_user]
+        if other_instances:
+            # Rebuild sudoers without the deleted instance
+            await _rebuild_dev_sudoers(ssh_user, None, None, config, ws_send, exclude_instance=instance_name)
+        else:
+            await _safe(f"rm -f /etc/sudoers.d/{ssh_user}", "remove sudoers")
+            await _safe(f"userdel {ssh_user} 2>/dev/null || true", "remove user")
 
     # Clean up data directory
     data_dir = f"{base}/data/{instance_name}"
