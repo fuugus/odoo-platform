@@ -701,8 +701,7 @@ sudo systemctl start {service}
 """
     claude_md_path = f"{data_dir}/CLAUDE.md"
     Path(claude_md_path).write_text(claude_md)
-    owner = ssh_user if ssh_user else "odoo"
-    await run_cmd(f"chown {owner}:odoo {claude_md_path}", ws_send)
+    await run_cmd(f"chown odoo:odoo {claude_md_path}", ws_send)
 
     # Determine SMTP settings
     if env == "prod":
@@ -815,7 +814,7 @@ WantedBy=multi-user.target
     ssh_user = None
     if env.startswith("dev"):
         dev_name = env.split("_", 1)[1] if "_" in env else env
-        ssh_user = f"dev-{dev_name}"
+        ssh_user = f"{client}-dev-{dev_name}"
         if ws_send:
             await ws_send(f"Setting up SSH access ({ssh_user})...")
         await run_cmd(
@@ -838,7 +837,6 @@ WantedBy=multi-user.target
 
         # Grant limited sudo: service control + odoo-bin for module upgrades
         await run_cmd(f"usermod -aG systemd-journal {ssh_user}", ws_send)
-        await _rebuild_dev_sudoers(ssh_user, instance_name, version, config, ws_send)
 
     # Update config
     config = load_config()
@@ -858,6 +856,10 @@ WantedBy=multi-user.target
         inst_config["ssh_user"] = ssh_user
     config["instances"][instance_name] = inst_config
     save_config(config)
+
+    # Rebuild sudoers after config is saved (needs all instances in config)
+    if ssh_user:
+        await _rebuild_dev_sudoers(ssh_user, None, None, config, ws_send)
 
     # Nginx per-instance config + SSL
     domain = config.get("domain", "")

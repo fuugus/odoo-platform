@@ -112,7 +112,7 @@ No test suite or linter is configured.
 
 The admin panel runs as root. All git operations on instance working copies and bare repos **MUST run as the correct user** to avoid creating files with wrong ownership:
 
-- **Working copy operations** (add, commit, pull, fetch, status, config): `sudo -u {owner}` where owner = `get_instance_owner(instance)` (e.g., `dev-samuel` for dev instances, `odoo` for prod)
+- **Working copy operations** (add, commit, pull, fetch, status, config): `sudo -u {owner}` where owner = `get_instance_owner(instance)` (e.g., `kaminfeger-dev-samuel` for dev instances, `odoo` for prod)
 - **Push to bare repos** (`/opt/git/odoo{ver}-addons.git`): always `sudo -u odoo git push`
 
 Never run bare `git` commands (without sudo -u) on instance addons directories — root-owned objects break dev access.
